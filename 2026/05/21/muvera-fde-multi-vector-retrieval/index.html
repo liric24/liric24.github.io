@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>MuVERA FDE 多向量检索：从原理到工程落地 | Hua Chen&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="多向量模型（ColBERT&#x2F;ColPali&#x2F;Jina-v4）通过 token 级别的交互实现了远超单向量的检索质量，但 MaxSim 的计算开销让大规模部署成为难题。本文梳理 MuVERA FDE 的算法原理、Google C++ 与 Weaviate 两套实现的差异、业界落地进展，以及 WARP&#x2F;LEMUR 等替代方案的对比。">
+<meta property="og:type" content="article">
+<meta property="og:title" content="MuVERA FDE 多向量检索：从原理到工程落地">
+<meta property="og:url" content="https://liric24.github.io/2026/05/21/muvera-fde-multi-vector-retrieval/index.html">
+<meta property="og:site_name" content="Hua Chen&#39;s Blog">
+<meta property="og:description" content="多向量模型（ColBERT&#x2F;ColPali&#x2F;Jina-v4）通过 token 级别的交互实现了远超单向量的检索质量，但 MaxSim 的计算开销让大规模部署成为难题。本文梳理 MuVERA FDE 的算法原理、Google C++ 与 Weaviate 两套实现的差异、业界落地进展，以及 WARP&#x2F;LEMUR 等替代方案的对比。">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:published_time" content="2026-05-20T16:00:00.000Z">
+<meta property="article:modified_time" content="2026-05-21T12:33:18.385Z">
+<meta property="article:author" content="Hua Chen">
+<meta property="article:tag" content="embedding">
+<meta property="article:tag" content="multi-vector">
+<meta property="article:tag" content="ColBERT">
+<meta property="article:tag" content="retrieval">
+<meta property="article:tag" content="MuVERA">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Hua Chen's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hua Chen&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Multimodal Representation &amp; AI Search</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://liric24.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-muvera-fde-multi-vector-retrieval" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/" class="article-date">
+  <time class="dt-published" datetime="2026-05-20T16:00:00.000Z" itemprop="datePublished">2026-05-21</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%90%9C%E7%B4%A2%E6%8A%80%E6%9C%AF/">搜索技术</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      MuVERA FDE 多向量检索：从原理到工程落地
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>多向量模型（ColBERT/ColPali/Jina-v4）通过 token 级别的交互实现了远超单向量的检索质量，但 MaxSim 的计算开销让大规模部署成为难题。本文梳理 MuVERA FDE 的算法原理、Google C++ 与 Weaviate 两套实现的差异、业界落地进展，以及 WARP/LEMUR 等替代方案的对比。</p>
+<span id="more"></span>
+<h2 id="1-问题：多向量检索的代价"><a href="#1-问题：多向量检索的代价" class="headerlink" title="1. 问题：多向量检索的代价"></a>1. 问题：多向量检索的代价</h2><p>单向量检索：每个文档 1 个向量，HNSW 索引，毫秒级查询。</p>
+<p>多向量检索（ColBERT 风格）：每个文档 100+ 个 token 向量，MaxSim 打分需要 query 的每个 token 与 document 的每个 token 计算内积再取 max 求和。索引规模膨胀 100x，查询延迟从毫秒变成秒级。</p>
+<p>MuVERA（NeurIPS 2024, Google Research）的核心思路：把多向量压缩为<strong>单个固定维度向量（FDE）</strong>，使得两个 FDE 的点积近似原始的 Chamfer/MaxSim 相似度，从而将多向量检索归约为标准 MIPS。</p>
+<h2 id="2-MuVERA-算法原理"><a href="#2-MuVERA-算法原理" class="headerlink" title="2. MuVERA 算法原理"></a>2. MuVERA 算法原理</h2><h3 id="2-1-四步流程"><a href="#2-1-四步流程" class="headerlink" title="2.1 四步流程"></a>2.1 四步流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br></pre></td><td class="code"><pre><span class="line">token embeddings [N, D]</span><br><span class="line">  │</span><br><span class="line">  ├─ 1. SimHash 空间分区 → 2^K 个桶</span><br><span class="line">  ├─ 2. 投影降维（AMS Sketch / Dense ±1）</span><br><span class="line">  ├─ 3. 分区内聚合（Query: SUM / Doc: AVERAGE）</span><br><span class="line">  ├─ 4. R 次独立重复，拼接</span><br><span class="line">  │</span><br><span class="line">  Concat → [R × 2^K × proj_dim]  (natural_dim)</span><br><span class="line">  │</span><br><span class="line">  └─ 5. Count Sketch 最终投影 → [final_dim]  (可选压缩)</span><br></pre></td></tr></table></figure>
+<h3 id="2-2-非对称编码：为什么-Query-用-SUM、Document-用-AVERAGE"><a href="#2-2-非对称编码：为什么-Query-用-SUM、Document-用-AVERAGE" class="headerlink" title="2.2 非对称编码：为什么 Query 用 SUM、Document 用 AVERAGE"></a>2.2 非对称编码：为什么 Query 用 SUM、Document 用 AVERAGE</h3><p>Chamfer 相似度定义：</p>
+<script type="math/tex; mode=display">\text{Chamfer}(Q, D) = \sum_{q \in Q} \max_{d \in D} \langle q, d \rangle</script><ul>
+<li>对 query：<strong>求和</strong>（每个 query token 独立贡献）</li>
+<li>对 document：<strong>取 max</strong>（只关心最匹配的那一个 doc token）</li>
+</ul>
+<p>FDE 需要让 <code>dot(FDE_q, FDE_d)</code> 近似这个不对称的定义。看各种编码组合的 scaling：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>编码组合</th>
+<th>dot product 的 scale</th>
+<th style="text-align:center">与 Chamfer 一致？</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SUM × SUM</td>
+<td>∝ \</td>
+<td style="text-align:center">Q_k\</td>
+<td>× \</td>
+<td>D_k\</td>
+<td></td>
+<td>❌</td>
+</tr>
+<tr>
+<td>AVG × AVG</td>
+<td>∝ 1 × 1</td>
+<td style="text-align:center">❌</td>
+</tr>
+<tr>
+<td><strong>SUM × AVG</strong></td>
+<td>**∝ \</td>
+<td style="text-align:center">Q_k\</td>
+<td>× 1**</td>
+<td><strong>✅</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>只有 SUM × AVG 的 scaling 与 Chamfer 一致：贡献与 query token 数量成正比，与 document token 数量无关。</p>
+<h3 id="2-3-natural-dim-与-final-dim-的关系"><a href="#2-3-natural-dim-与-final-dim-的关系" class="headerlink" title="2.3 natural_dim 与 final_dim 的关系"></a>2.3 natural_dim 与 final_dim 的关系</h3><p><code>natural_dim = R × 2^K × proj_dim</code> 是 FDE 拼接后的原始维度。Count Sketch 可将其压缩到 <code>final_dim</code>。</p>
+<p><strong>关键约束</strong>：<code>natural_dim</code> 必须 &gt; <code>final_dim</code>，否则 Count Sketch 是在扩维加噪声而非压缩。</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>参数组合</th>
+<th>natural_dim</th>
+<th>final_dim</th>
+<th>效果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>reps=4, simhash=3, proj=64</td>
+<td>2,048</td>
+<td>4,096</td>
+<td>❌ 扩维加噪声</td>
+</tr>
+<tr>
+<td>reps=10, simhash=6, proj=64</td>
+<td>40,960</td>
+<td>4,096</td>
+<td>✅ 10x 压缩</td>
+</tr>
+<tr>
+<td>reps=20, simhash=7, proj=128</td>
+<td>327,680</td>
+<td>4,096</td>
+<td>✅ 80x 压缩</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><code>natural_dim</code> 是中间计算量（离线一次性），<code>final_dim</code> 才是存储维度（影响在线查询速度）。所以 <code>natural_dim</code> 可以很大，不影响存储和查询延迟。</p>
+<h3 id="2-4-空分区回填"><a href="#2-4-空分区回填" class="headerlink" title="2.4 空分区回填"></a>2.4 空分区回填</h3><p>SimHash 将 token vectors 分配到 2^K 个桶。如果 document 的 token 数少于桶数（比如 20 个 token 分到 64 个桶），大部分桶是空的。</p>
+<ul>
+<li><strong>Document FDE</strong>：空桶用 SimHash Hamming 距离最近的 token 向量回填，避免 query 命中空桶时得分为零</li>
+<li><strong>Query FDE</strong>：空桶保持零（没有 query token 关心的语义区域不应该引入噪声）</li>
+</ul>
+<p>Google C++ 直接禁止了 query 的空分区回填：</p>
+<figure class="highlight cpp"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line"><span class="keyword">if</span> (config.<span class="built_in">fill_empty_partitions</span>())</span><br><span class="line">    <span class="keyword">return</span> <span class="built_in">InvalidArgumentError</span>(<span class="string">&quot;Query FDE does not support fill_empty_partitions.&quot;</span>);</span><br></pre></td></tr></table></figure>
+<h2 id="3-两套参考实现的差异"><a href="#3-两套参考实现的差异" class="headerlink" title="3. 两套参考实现的差异"></a>3. 两套参考实现的差异</h2><h3 id="3-1-架构流程对比"><a href="#3-1-架构流程对比" class="headerlink" title="3.1 架构流程对比"></a>3.1 架构流程对比</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Google C++:</span><br><span class="line">  token → SimHash(Gray code) → AMS Sketch 投影 → SUM/AVG → Count Sketch → [final_dim]</span><br><span class="line"></span><br><span class="line">Weaviate:</span><br><span class="line">  token → SimHash(direct bit) → SUM/AVG(原始空间) → Dense ±1 投影 × 1/√proj_dim → [reps × 2^K × DProj]</span><br></pre></td></tr></table></figure>
+<h3 id="3-2-逐项对比"><a href="#3-2-逐项对比" class="headerlink" title="3.2 逐项对比"></a>3.2 逐项对比</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>Google C++</th>
+<th>Weaviate</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SimHash 编码</td>
+<td>Gray code（相邻分区 Hamming 距离=1）</td>
+<td>直接 bit 位拼接，无 Gray code</td>
+</tr>
+<tr>
+<td>投影矩阵</td>
+<td>AMS Sketch（每行 1 个非零 ±1，极稀疏，O(D)）</td>
+<td>全密集 ±1 Rademacher 矩阵（O(D×proj_dim)）</td>
+</tr>
+<tr>
+<td>投影 scaling</td>
+<td>无</td>
+<td>1/√(proj_dim)</td>
+</tr>
+<tr>
+<td>投影时机</td>
+<td>先投影再聚合</td>
+<td>先聚合再投影（线性等价）</td>
+</tr>
+<tr>
+<td>RNG</td>
+<td>每个矩阵独立 mt19937(seed+rep)</td>
+<td>全局一个 PCG 连续消费</td>
+</tr>
+<tr>
+<td>空分区回填向量</td>
+<td>投影后向量</td>
+<td>原始向量（后续统一投影）</td>
+</tr>
+<tr>
+<td>Final projection</td>
+<td>Count Sketch 可选压缩</td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="3-3-关键设计选择解读"><a href="#3-3-关键设计选择解读" class="headerlink" title="3.3 关键设计选择解读"></a>3.3 关键设计选择解读</h3><p><strong>Gray code vs 直接 bit 位</strong>：Gray code 保证相邻分区 Hamming 距离=1，对空分区 NN 回填更精确。Weaviate 简化掉了 Gray code，实测影响不大。</p>
+<p><strong>AMS Sketch vs Dense ±1</strong>：AMS 每行只有 1 个非零，投影复杂度 O(D)（就是查表），但信息保留更有限。Dense ±1 是完整的随机投影，保留更多信息但计算量 O(D×proj_dim)。Weaviate 选择了更重但更精确的方案。</p>
+<p><strong>投影时机</strong>：由于投影是线性操作，<code>project(sum(vectors)) = sum(project(vectors))</code>，所以先投影再聚合和先聚合再投影数学上等价。Weaviate 先聚合再投影，可以更好利用缓存。</p>
+<h2 id="4-业界落地进展"><a href="#4-业界落地进展" class="headerlink" title="4. 业界落地进展"></a>4. 业界落地进展</h2><h3 id="4-1-向量数据库集成"><a href="#4-1-向量数据库集成" class="headerlink" title="4.1 向量数据库集成"></a>4.1 向量数据库集成</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>平台</th>
+<th>版本</th>
+<th>MuVERA 状态</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Weaviate</strong></td>
+<td>v1.31+</td>
+<td>✅ 生产可用</td>
+<td>内置 MuVERA encoder，支持 ColBERT/ColPali</td>
+</tr>
+<tr>
+<td><strong>Qdrant</strong></td>
+<td>FastEmbed 0.7.2+</td>
+<td>✅ 生产可用</td>
+<td>MuveraPostprocessor + 两阶段检索</td>
+</tr>
+<tr>
+<td>Pinecone</td>
+<td>—</td>
+<td>❌</td>
+<td>推 ConstBERT（学习式压缩）</td>
+</tr>
+<tr>
+<td>Milvus</td>
+<td>v2.6/3.0</td>
+<td>❌</td>
+<td>走原生多向量路线（Tensor 类型）</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="4-2-Qdrant-推荐的两阶段架构"><a href="#4-2-Qdrant-推荐的两阶段架构" class="headerlink" title="4.2 Qdrant 推荐的两阶段架构"></a>4.2 Qdrant 推荐的两阶段架构</h3><figure class="highlight python"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br></pre></td><td class="code"><pre><span class="line"><span class="comment"># Collection 同时存 FDE 单向量 + 原始 ColBERT 多向量</span></span><br><span class="line">vectors_config = &#123;</span><br><span class="line">    <span class="string">&quot;muvera&quot;</span>: VectorParams(size=<span class="number">40960</span>, distance=COSINE),</span><br><span class="line">    <span class="string">&quot;colbert&quot;</span>: VectorParams(size=<span class="number">128</span>, multivector=MAX_SIM),</span><br><span class="line">&#125;</span><br><span class="line"></span><br><span class="line"><span class="comment"># 查询时：MuVERA 粗筛 → MaxSim 精排</span></span><br><span class="line">results = client.query_points(</span><br><span class="line">    collection_name=<span class="string">&quot;movies&quot;</span>,</span><br><span class="line">    prefetch=[Prefetch(query=muvera_query, using=<span class="string">&quot;muvera&quot;</span>, limit=<span class="number">200</span>)],</span><br><span class="line">    query=colbert_query, using=<span class="string">&quot;colbert&quot;</span>, limit=<span class="number">10</span>,</span><br><span class="line">)</span><br></pre></td></tr></table></figure>
+<h3 id="4-3-推荐参数"><a href="#4-3-推荐参数" class="headerlink" title="4.3 推荐参数"></a>4.3 推荐参数</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>来源</th>
+<th>reps</th>
+<th>simhash (分区)</th>
+<th>proj_dim</th>
+<th>FDE 维度</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Qdrant 推荐</td>
+<td>20</td>
+<td>6 (64)</td>
+<td>32</td>
+<td>40,960</td>
+</tr>
+<tr>
+<td>muvera-py 评测</td>
+<td>20</td>
+<td>7 (128)</td>
+<td>128</td>
+<td>327,680</td>
+</tr>
+<tr>
+<td>论文实验</td>
+<td>20</td>
+<td>4-5 (16-32)</td>
+<td>128</td>
+<td>40,960-81,920</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="4-4-Benchmark"><a href="#4-4-Benchmark" class="headerlink" title="4.4 Benchmark"></a>4.4 Benchmark</h3><p><strong>QPS 对比（LEMUR 论文, ColBERTv2, BEIR）：</strong></p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>MSMARCO QPS</th>
+<th>NQ QPS</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LEMUR</td>
+<td>799</td>
+<td>950</td>
+<td>学习式压缩, SOTA</td>
+</tr>
+<tr>
+<td>MuVERA</td>
+<td>150</td>
+<td>79</td>
+<td>随机投影, 零训练</td>
+</tr>
+<tr>
+<td>IGP</td>
+<td>62</td>
+<td>107</td>
+<td>倒排+图</td>
+</tr>
+<tr>
+<td>PLAID</td>
+<td>13</td>
+<td>16</td>
+<td>ColBERT 官方</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>Recall 对比（muvera-py, NanoFiQA2018, ColBERT）：</strong></p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>Recall@10</th>
+<th>查询延迟</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ColBERT Native MaxSim</td>
+<td>0.700</td>
+<td>1618ms</td>
+</tr>
+<tr>
+<td>ColBERT + FDE (reps=20, parts=128)</td>
+<td>0.640</td>
+<td>190ms</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>FDE 牺牲 ~8.6% Recall@10，换来 8.5x 查询加速。</p>
+<h2 id="5-WARP：原生多向量检索引擎"><a href="#5-WARP：原生多向量检索引擎" class="headerlink" title="5. WARP：原生多向量检索引擎"></a>5. WARP：原生多向量检索引擎</h2><p>WARP（Stanford + UC Berkeley + ETH, SIGIR 2025）走了与 MuVERA 完全不同的路线：不压缩为单向量，而是在 ColBERTv2/PLAID 的基础上做极致工程优化。</p>
+<h3 id="5-1-三大优化"><a href="#5-1-三大优化" class="headerlink" title="5.1 三大优化"></a>5.1 三大优化</h3><p><strong>优化 1：WARP_SELECT — 零成本缺失相似度估计</strong></p>
+<p>MaxSim 需要每个 query token 对每个候选 doc 的所有 token 都算相似度。实际上大部分是”缺失”的（没检索到）。XTR 用检索到的最低分来估计缺失值，但这个估计质量依赖 k’（检索数量），k’ 越大越慢。</p>
+<p>WARP 利用候选生成阶段<strong>已算好的 query-centroid 相似度</strong>来估计缺失值：按相似度排序聚类中心，累积聚类大小超过阈值时的中心相似度 = 缺失估计值。额外计算成本 ≈ 0。</p>
+<p><strong>优化 2：隐式解压缩 — 查表替代矩阵乘法</strong></p>
+<p>PLAID 的瓶颈是解压缩：把 4-bit 残差还原成 128-dim float 向量再算点积。WARP 做了一个数学拆解：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br></pre></td><td class="code"><pre><span class="line">score = (centroid + residual) × q^T</span><br><span class="line">      = centroid × q^T  +  residual × q^T</span><br><span class="line">        ↑ 已算过           ↑ 预计算 lookup table</span><br></pre></td></tr></table></figure>
+<p>预计算 <code>υ[i,d,b] = ω[b] × q[i,d]</code>（query 32 tokens × 128 dims × 16 buckets = 65536 个值），之后每个残差的打分变成纯查表累加，<strong>零次乘法</strong>。</p>
+<p><strong>优化 3：两阶段归约 — 不构造分数矩阵</strong></p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br></pre></td><td class="code"><pre><span class="line">第 1 阶段 Token-level Max：每个 query token 在探查的聚类内，同一 doc 的多个 token 取 max</span><br><span class="line">第 2 阶段 Doc-level Sum：汇总所有 query token 的 max 分数 + 缺失填充，求和得 doc 最终分数</span><br></pre></td></tr></table></figure>
+<h3 id="5-2-性能"><a href="#5-2-性能" class="headerlink" title="5.2 性能"></a>5.2 性能</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>对比</th>
+<th>加速</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>vs XTR</td>
+<td>41x</td>
+<td>LoTTE Pooled: 6s → 171ms</td>
+</tr>
+<tr>
+<td>vs ColBERTv2/PLAID</td>
+<td>3x</td>
+<td>不损失检索质量</td>
+</tr>
+<tr>
+<td>索引大小</td>
+<td>2-4x 缩小</td>
+<td>vs ScaNN baseline</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="6-LEMUR：学习式压缩"><a href="#6-LEMUR：学习式压缩" class="headerlink" title="6. LEMUR：学习式压缩"></a>6. LEMUR：学习式压缩</h2><p>LEMUR（2025.01）用<strong>训练过的模型</strong>将多向量压缩为单向量，比 MuVERA 的随机投影保留更多信息。在 80% recall 水平上比 MuVERA 快 5-11x。</p>
+<p>代价是需要额外的训练过程，不像 MuVERA 拿到任何 embedding 就能直接编码。</p>
+<h2 id="7-技术路线选型"><a href="#7-技术路线选型" class="headerlink" title="7. 技术路线选型"></a>7. 技术路线选型</h2><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">                多向量检索加速</span><br><span class="line">                     │</span><br><span class="line">      ┌──────────────┼──────────────┐</span><br><span class="line">      │              │              │</span><br><span class="line">压缩为单向量      原生多向量引擎    学习式压缩</span><br><span class="line"> (MuVERA)       (WARP/PLAID)    (LEMUR/ConstBERT)</span><br><span class="line">      │              │              │</span><br><span class="line">Weaviate ✅      独立部署         Pinecone ✅</span><br><span class="line">Qdrant ✅       C++ kernel       需要训练</span><br><span class="line">零训练           3x &gt; PLAID       最快 (5-11x &gt; MuVERA)</span><br><span class="line">集成最容易       集成最难          需要额外模型训练</span><br></pre></td></tr></table></figure>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>已有向量数据库 + 快速落地</td>
+<td><strong>MuVERA</strong>（零训练，输出就是普通向量）</td>
+</tr>
+<tr>
+<td>追求极致性能 + 可接受训练成本</td>
+<td><strong>LEMUR</strong></td>
+</tr>
+<tr>
+<td>独立检索引擎 + ColBERT 生态</td>
+<td><strong>WARP</strong></td>
+</tr>
+<tr>
+<td>Milvus 用户</td>
+<td>等 Tensor 类型原生支持，或外部做 MuVERA 编码后存入</td>
+</tr>
+<tr>
+<td>两阶段混合</td>
+<td>MuVERA FDE 粗筛 + 原始 MaxSim 精排（Qdrant 推荐方案）</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="8-实践踩坑：参数选择的影响"><a href="#8-实践踩坑：参数选择的影响" class="headerlink" title="8. 实践踩坑：参数选择的影响"></a>8. 实践踩坑：参数选择的影响</h2><p>在实际部署 jina-v4 + late chunking + MuVERA FDE 的过程中，发现以下经验：</p>
+<ol>
+<li><p><strong>natural_dim 必须远大于 final_dim</strong>：否则 Count Sketch 是在扩维加噪声。reps=4, simhash=3 (natural_dim=2048) 配 final_dim=4096 是典型的反模式。</p>
+</li>
+<li><p><strong>simhash_num 调到 6 只有好处</strong>：对 Query N=1 的场景，分区增多不会让 query 更差（空分区=零，不贡献噪声），但让 doc 分区更精确。</p>
+</li>
+<li><p><strong>Query 侧用 SUM 不用 AVERAGE</strong>：即使 query 是单向量（N=1 时 SUM=AVERAGE），也应显式使用 SUM 模式，跳过无意义的空分区回填，节省计算。</p>
+</li>
+<li><p><strong>Query 保留 token embeddings 效果更好</strong>：如果模型支持 token 级别的 MaxSim（如 jina-v4），query 不应 mean pool 后再做 FDE，而应保留 token embeddings 作为 point cloud，充分利用 token 粒度匹配能力。</p>
+</li>
+</ol>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/05/21/muvera-fde-multi-vector-retrieval/" data-id="cmpfi9b1v000bq46r7vlrbe6x" data-title="MuVERA FDE 多向量检索：从原理到工程落地" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/ColBERT/" rel="tag">ColBERT</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/MuVERA/" rel="tag">MuVERA</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/multi-vector/" rel="tag">multi-vector</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+  
+    <a href="/2026/05/20/on-policy-distillation-opsd-glm5/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%90%9C%E7%B4%A2%E6%8A%80%E6%9C%AF/">搜索技术</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/ColBERT/" rel="tag">ColBERT</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MuVERA/" rel="tag">MuVERA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multi-vector/" rel="tag">multi-vector</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/ColBERT/" style="font-size: 10px;">ColBERT</a> <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/MuVERA/" style="font-size: 10px;">MuVERA</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 20px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multi-vector/" style="font-size: 10px;">multi-vector</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 20px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/01/">一月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/">MuVERA FDE 多向量检索：从原理到工程落地</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/cacheblend-kvcache-rag-inference/">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/jina-embeddings-v4-paper-reading/">Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Hua Chen<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>

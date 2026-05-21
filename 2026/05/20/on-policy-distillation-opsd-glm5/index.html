@@ -14,7 +14,7 @@
 <meta property="og:description" content="大模型后训练（post-training）正在从”SFT + RLHF”的两阶段范式，演进到以 On-Policy Distillation (OPD) 为核心的新范式。本文梳理蒸馏技术从离线 KD 到 OPSD 的演进脉络，解读 OPSD 论文的核心机制，并结合 GLM-5 技术报告分析 OPD 在大规模生产中的实践。">
 <meta property="og:locale" content="zh_CN">
 <meta property="article:published_time" content="2026-05-19T16:00:00.000Z">
-<meta property="article:modified_time" content="2026-05-21T08:55:02.056Z">
+<meta property="article:modified_time" content="2026-05-21T12:35:02.941Z">
 <meta property="article:author" content="Hua Chen">
 <meta property="article:tag" content="RL">
 <meta property="article:tag" content="distillation">
@@ -41,7 +41,11 @@
   
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
 
-<meta name="generator" content="Hexo 7.3.0"></head>
+<meta name="generator" content="Hexo 7.3.0">
+<script>
+MathJax = {
+  tex: {
+    inlineMath: [['
 
 <body>
   <div id="container">
@@ -111,10 +115,9 @@
       
         <p>大模型后训练（post-training）正在从”SFT + RLHF”的两阶段范式，演进到以 On-Policy Distillation (OPD) 为核心的新范式。本文梳理蒸馏技术从离线 KD 到 OPSD 的演进脉络，解读 OPSD 论文的核心机制，并结合 GLM-5 技术报告分析 OPD 在大规模生产中的实践。</p>
 <span id="more"></span>
-
 <h2 id="1-蒸馏方法演进路线"><a href="#1-蒸馏方法演进路线" class="headerlink" title="1. 蒸馏方法演进路线"></a>1. 蒸馏方法演进路线</h2><h3 id="1-1-四个阶段"><a href="#1-1-四个阶段" class="headerlink" title="1.1 四个阶段"></a>1.1 四个阶段</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">Level 1: 离线 KD (Offline Knowledge Distillation)</span><br><span class="line">  Student 在 Teacher 生成的轨迹上训练</span><br><span class="line">  → 有 exposure bias: 训练看 teacher 的路，推理走自己的路</span><br><span class="line"></span><br><span class="line">Level 2: 在线 KD (Online/Iterative KD)</span><br><span class="line">  Teacher 在线生成数据，但 student 仍在 teacher 的状态上训练</span><br><span class="line">  → 减少数据陈旧性，但 exposure bias 仍在</span><br><span class="line"></span><br><span class="line">Level 3: On-Policy Distillation (OPD)</span><br><span class="line">  Student 自己 rollout → Teacher 在 student 的状态上提供指导</span><br><span class="line">  → 消除 exposure bias，但需要外部 teacher 模型</span><br><span class="line"></span><br><span class="line">Level 4: On-Policy Self-Distillation (OPSD)</span><br><span class="line">  同一个模型同时当 student 和 teacher（通过不同 prompt 输入）</span><br><span class="line">  → 消除 exposure bias + 不需要外部 teacher</span><br></pre></td></tr></table></figure>
-
-<h3 id="1-2-核心对比"><a href="#1-2-核心对比" class="headerlink" title="1.2 核心对比"></a>1.2 核心对比</h3><table>
+<h3 id="1-2-核心对比"><a href="#1-2-核心对比" class="headerlink" title="1.2 核心对比"></a>1.2 核心对比</h3><div class="table-container">
+<table>
 <thead>
 <tr>
 <th>方法</th>
@@ -124,7 +127,8 @@
 <th>Exposure Bias</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td>SFT</td>
 <td>teacher 的</td>
 <td>sequence-level</td>
@@ -139,7 +143,7 @@
 <td>无</td>
 </tr>
 <tr>
-<td>GRPO&#x2F;PPO</td>
+<td>GRPO/PPO</td>
 <td>student 的</td>
 <td>sparse reward</td>
 <td>不需要</td>
@@ -159,7 +163,9 @@
 <td><strong>不需要</strong></td>
 <td>无</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <p>OPSD 的独特之处：<strong>在 student 的状态分布上提供 dense token-level 监督，且不需要外部 teacher 模型</strong>。</p>
 <h2 id="2-OPD：On-Policy-Distillation"><a href="#2-OPD：On-Policy-Distillation" class="headerlink" title="2. OPD：On-Policy Distillation"></a>2. OPD：On-Policy Distillation</h2><h3 id="2-1-原理"><a href="#2-1-原理" class="headerlink" title="2.1 原理"></a>2.1 原理</h3><p>OPD (Agarwal et al., ICLR 2024) 的核心思想：</p>
 <ol>
@@ -168,17 +174,160 @@
 <li>Student 学习匹配 teacher 在这些状态上的分布</li>
 </ol>
 <p>形式化定义：</p>
-<p>$$<br>\mathcal{L}<em>{\text{OPD}}(\theta) &#x3D; \mathbb{E}</em>{x \sim p_{\text{data}},, y \sim \pi_{\theta}(\cdot|x)} \left[ \frac{1}{|y|} \sum_{t&#x3D;1}^{|y|} D\left(\pi_{\theta}(\cdot|s_t),, \nu(\cdot|s_t)\right) \right]<br>$$</p>
-<p>其中 $\pi_\theta$ 是 student，$\nu$ 是 teacher，$s_t &#x3D; (x, y_{&lt;t})$ 是 student 自己走到的状态。</p>
+$$
+\mathcal{L}_{\text{OPD}}(\theta) = \mathbb{E}_{x \sim p_{\text{data}},\, y \sim \pi_{\theta}(\cdot|x)} \left[ \frac{1}{|y|} \sum_{t=1}^{|y|} D\left(\pi_{\theta}(\cdot|s_t),\, \nu(\cdot|s_t)\right) \right]$$<p>其中 $\pi_\theta$ 是 student，$\nu$ 是 teacher，$s_t = (x, y_{&lt;t})$ 是 student 自己走到的状态。</p>
 <h3 id="2-2-两种-Loss-变体"><a href="#2-2-两种-Loss-变体" class="headerlink" title="2.2 两种 Loss 变体"></a>2.2 两种 Loss 变体</h3><p><strong>GKD OPD（forward KL，需要 teacher 完整分布）</strong>：</p>
-<p>$$<br>D(s_t) &#x3D; \sum_{v \in V} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}<br>$$</p>
-<p>直接通过 student 概率反向传播。使用 teacher 的 full distributional signal，精度高但显存开销大。</p>
+$$
+D(s_t) = \sum_{v \in V} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<p>直接通过 student 概率反向传播。使用 teacher 的 full distributional signal，精度高但显存开销大。</p>
 <p><strong>PG OPD（reverse KL 的单样本估计，只需 teacher 的一个 logprob）</strong>：</p>
-<p>$$<br>r_t &#x3D; \text{sg}\left[\log \nu(y_t|s_t) - \log \pi_\theta(y_t|s_t)\right]<br>$$</p>
-<p>把 teacher 和 student 的 log probability 之差作为 per-token reward，通过 policy gradient 更新。stop-gradient 是必须的——否则梯度会忽略 teacher 信号。</p>
-<h3 id="2-3-Multi-Teacher-OPD-MOPD"><a href="#2-3-Multi-Teacher-OPD-MOPD" class="headerlink" title="2.3 Multi-Teacher OPD (MOPD)"></a>2.3 Multi-Teacher OPD (MOPD)</h3><p>多个领域专家 teacher 同时蒸馏到一个 student。每个训练样本通过 <code>teacher_key</code> 路由到对应的 teacher。</p>
+$$
+r_t = \text{sg}\left[\log \nu(y_t|s_t) - \log \pi_\theta(y_t|s_t)\right]$$<p>把 teacher 和 student 的 log probability 之差作为 per-token reward，通过 policy gradient 更新。stop-gradient 是必须的——否则梯度会忽略 teacher 信号。</p>
+<h3 id="2-3-Forward-KL-vs-Reverse-KL"><a href="#2-3-Forward-KL-vs-Reverse-KL" class="headerlink" title="2.3 Forward KL vs Reverse KL"></a>2.3 Forward KL vs Reverse KL</h3><p>给定 Teacher 分布 $\nu$ 和 Student 分布 $\pi_\theta$，有两个方向的 KL：</p>
+<p><strong>Forward KL</strong>（Teacher 视角，”Teacher 觉得 Student 差在哪”）：</p>
+$$
+\text{KL}(\nu \| \pi_\theta) = \sum_{v \in \mathcal{V}} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>由 Teacher 分布 $\nu$ 加权</li>
+<li>Teacher 认为重要的 token（$\nu$ 大的），如果 Student 概率低 → 惩罚大</li>
+<li><strong>Mode-covering</strong>：Student 被鼓励覆盖 Teacher 的所有模式</li>
+<li>需要 Teacher 的<strong>完整 top-k 分布</strong>（GKD OPD 用这个）</li>
+</ul>
+<p><strong>Reverse KL</strong>（Student 视角，”Student 和 Teacher 差多少”）：</p>
+$$
+\text{KL}(\pi_\theta \| \nu) = \sum_{v \in \mathcal{V}} \pi_\theta(v|s_t) \log \frac{\pi_\theta(v|s_t)}{\nu(v|s_t)}$$<ul>
+<li>由 Student 分布 $\pi_\theta$ 加权</li>
+<li>Student 自己概率高的 token，如果 Teacher 概率低 → 惩罚大</li>
+<li><strong>Mode-seeking</strong>：Student 集中学 Teacher 最强的模式，放弃弱模式</li>
+<li>可以用<strong>单样本估计</strong>（只需要 Teacher 在采样 token 上的一个 logprob）</li>
+</ul>
+<p><strong>为什么 PG OPD 用 Reverse KL</strong>：Student 采样一个 $y_t \sim \pi_\theta$，就能得到 reverse KL 的<strong>无偏单样本估计</strong>：</p>
+$$
+\widehat{\text{KL}} = \log \pi_\theta(y_t|s_t) - \log \nu(y_t|s_t)$$<p>Forward KL 做不到这一点——它需要 $\nu$ 的完整分布才能计算。</p>
+<p><strong>直觉对比</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">Forward KL (mode-covering):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(55%) B(45%)&quot; → 两个都覆盖 ✓</span><br><span class="line">  适合: 不想遗漏任何 Teacher 知道的可能性</span><br><span class="line">  缺点: 需要完整分布，计算贵</span><br><span class="line"></span><br><span class="line">Reverse KL (mode-seeking):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(90%) B(10%)&quot; → 集中学最强的 ✓</span><br><span class="line">  适合: 只需要一个 logprob，计算便宜</span><br><span class="line">  缺点: 可能丢掉 Teacher 的次优模式</span><br></pre></td></tr></table></figure>
+<h3 id="2-4-veRL-的-Reverse-KL-估计器"><a href="#2-4-veRL-的-Reverse-KL-估计器" class="headerlink" title="2.4 veRL 的 Reverse KL 估计器"></a>2.4 veRL 的 Reverse KL 估计器</h3><p>定义 importance ratio：$\rho_t = \frac{\nu(y_t|s_t)}{\pi_\theta(y_t|s_t)}$</p>
+<p>所有估计器都是 $\rho$ 的函数：</p>
+<p><strong>k1（Log-ratio）</strong>：$D_{k1}(\rho) = \log \rho$</p>
+<ul>
+<li>reverse KL 的直接单样本估计，无偏</li>
+<li>问题：$\rho \to 0$ 时 $\log \rho \to -\infty$（梯度爆炸）</li>
+<li>用途：GLM-5、OPSD 论文</li>
+</ul>
+<p><strong>k2（Chi-squared）</strong>：$D_{k2}(\rho) = \frac{1}{2}(\rho - 1)^2$</p>
+<ul>
+<li>$\chi^2$ 散度估计，对称</li>
+<li>问题：$\rho$ 很大时惩罚 $O(\rho^2)$</li>
+</ul>
+<p><strong>k3（Pinsker 风格，veRL 默认）</strong>：$D_{k3}(\rho) = \rho - 1 - \log \rho$</p>
+<ul>
+<li>永远非负，稳定性最好</li>
+<li>$\rho \to 0$ 时不像 k1 那样爆炸，$\rho \to \infty$ 时线性增长（不像 k2 平方增长）</li>
+<li>来源：DeepSeek-V4 采用</li>
+</ul>
+<p><strong>数值对比</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>$\rho$</th>
+<th>含义</th>
+<th>k1</th>
+<th>k2</th>
+<th>k3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.01</td>
+<td>Student 极不对</td>
+<td>-4.61</td>
+<td>0.49</td>
+<td><strong>3.62</strong></td>
+</tr>
+<tr>
+<td>0.1</td>
+<td>Student 不太对</td>
+<td>-2.30</td>
+<td>0.41</td>
+<td><strong>1.40</strong></td>
+</tr>
+<tr>
+<td>0.5</td>
+<td>Student 偏弱</td>
+<td>-0.69</td>
+<td>0.13</td>
+<td><strong>0.19</strong></td>
+</tr>
+<tr>
+<td>1.0</td>
+<td>完美一致</td>
+<td>0</td>
+<td>0</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td>2.0</td>
+<td>Teacher 更强</td>
+<td>0.69</td>
+<td>0.50</td>
+<td><strong>0.31</strong></td>
+</tr>
+<tr>
+<td>10.0</td>
+<td>差异极大</td>
+<td>2.30</td>
+<td>40.50</td>
+<td><strong>6.70</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>如何选择</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通用 OPD</td>
+<td><strong>k3</strong></td>
+<td>稳定，DeepSeek-V4 验证</td>
+</tr>
+<tr>
+<td>数学推理（答案确定性高）</td>
+<td>k1 或 k3</td>
+<td>k1 更简单，但需要 clipping</td>
+</tr>
+<tr>
+<td>搜索 Agent（答案开放性高）</td>
+<td><strong>k3</strong></td>
+<td>Teacher/Student 分布可能差异大，k3 更稳定</td>
+</tr>
+<tr>
+<td>需要完整分布信号</td>
+<td><strong>forward_kl_topk</strong></td>
+<td>GKD 模式，精度最高但贵</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="2-5-Forward-KL-Top-K（GKD-OPD）"><a href="#2-5-Forward-KL-Top-K（GKD-OPD）" class="headerlink" title="2.5 Forward KL Top-K（GKD OPD）"></a>2.5 Forward KL Top-K（GKD OPD）</h3><p>与单样本估计器完全不同——使用 Teacher 的完整 top-k 分布：</p>
+$$
+D_{\text{fkl\_topk}}(s_t) = \sum_{v \in \text{TopK}(\nu(\cdot|s_t))} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>需要 Teacher 返回 top-k 个 token 的概率（默认 k=32）</li>
+<li>直接对 Student 概率反向传播（不走 policy gradient）</li>
+<li>信号最 dense（每个位置有 k 个 token 的分布信息）</li>
+<li>显存开销大（需要存 k × sequence_length 的 logit tensor）</li>
+</ul>
+<p>OPSD 论文实验表明 Forward KL &gt; Reverse KL（Table 3），但 GLM-5 在生产中选了 PG OPD (k1)，因为长 trajectory 的显存开销不允许 forward KL。</p>
+<h3 id="2-6-Multi-Teacher-OPD-MOPD"><a href="#2-6-Multi-Teacher-OPD-MOPD" class="headerlink" title="2.6 Multi-Teacher OPD (MOPD)"></a>2.6 Multi-Teacher OPD (MOPD)</h3><p>多个领域专家 teacher 同时蒸馏到一个 student。每个训练样本通过 <code>teacher_key</code> 路由到对应的 teacher。</p>
 <p>已在生产中使用：GLM-5、Qwen3、Nemotron-Cascade 2、MiMo-v2-flash、DeepSeek-V4。</p>
-<h3 id="2-4-veRL-的-OPD-实现"><a href="#2-4-veRL-的-OPD-实现" class="headerlink" title="2.4 veRL 的 OPD 实现"></a>2.4 veRL 的 OPD 实现</h3><p>veRL 已有完整的 OPD 实现（<a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">文档</a>），支持：</p>
+<h3 id="2-7-veRL-的-OPD-实现"><a href="#2-7-veRL-的-OPD-实现" class="headerlink" title="2.7 veRL 的 OPD 实现"></a>2.7 veRL 的 OPD 实现</h3><p>veRL 已有完整的 OPD 实现（<a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">文档</a>），支持：</p>
+<div class="table-container">
 <table>
 <thead>
 <tr>
@@ -186,7 +335,8 @@
 <th>说明</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td><code>loss_mode</code></td>
 <td><code>k3</code>（默认）、<code>k1</code>、<code>forward_kl_topk</code> 等</td>
 </tr>
@@ -206,21 +356,20 @@
 <td>多 Teacher</td>
 <td>支持，通过 <code>teacher_models</code> 配置</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <h2 id="3-OPSD：On-Policy-Self-Distillation"><a href="#3-OPSD：On-Policy-Self-Distillation" class="headerlink" title="3. OPSD：On-Policy Self-Distillation"></a>3. OPSD：On-Policy Self-Distillation</h2><p><strong>论文</strong>：arXiv:2601.18734 (Siyan Zhao et al., UCLA + Meta, ICML 2026)<br><strong>代码</strong>：<a target="_blank" rel="noopener" href="https://github.com/siyan-zhao/OPSD">https://github.com/siyan-zhao/OPSD</a></p>
 <h3 id="3-1-核心机制"><a href="#3-1-核心机制" class="headerlink" title="3.1 核心机制"></a>3.1 核心机制</h3><p>同一个模型，不同的输入，分别扮演 Student 和 Teacher：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Student: p_S(·|x)         ← 只看问题（模拟推理时）</span><br><span class="line">Teacher: p_T(·|x, y*)     ← 看问题 + 正确答案（特权信息）</span><br><span class="line"></span><br><span class="line">两者共享同一套参数！</span><br><span class="line">Teacher 不生成 token，只做一次 forward pass 算 logprobs。</span><br></pre></td></tr></table></figure>
-
 <p><strong>直觉</strong>：rationalization（知道答案后理解推理步骤）比 generation（从零推理）容易得多。给模型看正确答案后，它在 student 走过的每个状态上都能提供更好的 token 分布。</p>
 <h3 id="3-2-算法流程"><a href="#3-2-算法流程" class="headerlink" title="3.2 算法流程"></a>3.2 算法流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Input: 数据集 S = &#123;(x_i, y_i*)&#125;，模型 p_θ，散度 D</span><br><span class="line">While not converged:</span><br><span class="line">    Sample minibatch B from S</span><br><span class="line">    For each (x, y*) in B:</span><br><span class="line">        1. Student rollout: ŷ ~ p_S(·|x)          [on-policy 采样]</span><br><span class="line">        2. Student forward: p_S(yₙ|x, ŷ&lt;n)        [不知道答案]</span><br><span class="line">        3. Teacher forward: p_T(yₙ|x, y*, ŷ&lt;n)    [知道答案]</span><br><span class="line">        4. Per-token loss: D(p_T || p_S) at each n</span><br><span class="line">    Update θ (梯度只流过 p_S，不流过 p_T)</span><br></pre></td></tr></table></figure>
-
 <h3 id="3-3-Prompt-构造"><a href="#3-3-Prompt-构造" class="headerlink" title="3.3 Prompt 构造"></a>3.3 Prompt 构造</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;Problem: [问题]\nAnswer:&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;Problem: [问题]\nHere is a reference solution: [y*]\n</span><br><span class="line">   After understanding the reference solution, please try to solve</span><br><span class="line">   this problem using your own approach below:\nAnswer:&quot;</span><br></pre></td></tr></table></figure>
-
 <p>Teacher 的 prompt 里包含正确答案 y*，但它不生成任何 token——只对 student 的 rollout ŷ 做一次 forward pass，算出每个位置的 logprobs。</p>
 <h3 id="3-4-关键设计决策"><a href="#3-4-关键设计决策" class="headerlink" title="3.4 关键设计决策"></a>3.4 关键设计决策</h3><p><strong>Teacher 固定为初始 checkpoint</strong>：训练过程中不更新 teacher 权重。这样做的好处：</p>
 <ul>
 <li>稳定训练</li>
-<li>隐式正则化：防止 student 偏离初始 policy 太远（类似 GRPO&#x2F;PPO 中对 reference policy 的 KL penalty）</li>
+<li>隐式正则化：防止 student 偏离初始 policy 太远（类似 GRPO/PPO 中对 reference policy 的 KL penalty）</li>
 </ul>
 <p><strong>Thinking Mode 选择（Qwen3 场景）</strong>：</p>
 <ul>
@@ -230,20 +379,28 @@
 <p><strong>Per-Token Pointwise KL Clipping</strong>：</p>
 <ul>
 <li>问题：stylistic tokens（”wait”、”however”、”therefore”）的 KL divergence 远高于数学 tokens，会主导训练信号</li>
-<li>解法：per-token pointwise clip，截断每个 token 位置上的最大 KL 贡献</li>
+<li>解法：per-token pointwise clip，截断每个 token 位置上的最大 KL 贡献：</li>
+</ul>
+$$
+D_{\text{clip}}(p_T \| p_S) = \frac{1}{|\hat{y}|} \sum_n \sum_{v \in \mathcal{V}} \min\!\left(\ell_{n,v},\; \tau\right)$$<ul>
 <li>效果：防止性能崩塌，尤其在 OPSD 快速收敛（~100 steps）时尤为重要</li>
 </ul>
+<p><strong>OPSD Loss（JSD 散度）</strong>：</p>
+$$
+\text{JSD}_\beta(p_T \| p_S) = \beta \cdot \text{KL}(p_T \| m) + (1-\beta) \cdot \text{KL}(p_S \| m)$$<p>其中 $m = \beta \cdot p_T + (1-\beta) \cdot p_S$。实验表明 Forward KL 效果最好（Table 3, Qwen3-1.7B AIME25: Forward KL 43.9 vs Reverse KL 限制增益）。</p>
 <h3 id="3-5-核心实验结果"><a href="#3-5-核心实验结果" class="headerlink" title="3.5 核心实验结果"></a>3.5 核心实验结果</h3><p>在竞赛级数学推理 benchmark 上：</p>
+<div class="table-container">
 <table>
 <thead>
 <tr>
 <th>方法</th>
-<th>Token 预算&#x2F;题</th>
-<th>Rollouts&#x2F;题</th>
+<th>Token 预算/题</th>
+<th>Rollouts/题</th>
 <th>收敛步数</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td>GRPO</td>
 <td>~128K tokens (8×16K)</td>
 <td>8</td>
@@ -261,33 +418,34 @@
 <td>-</td>
 <td>~200</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <p><strong>OPSD 的 token 效率比 GRPO 高 128 倍</strong>，同时效果相当或更好。</p>
 <p>GRPO 的问题：在 100 步内，&gt;50% 的 batch 出现 reward diversity collapse（全对或全错），梯度信号为零。OPSD 的 dense token-level loss 完全不受此影响——答对答错都有学习信号。</p>
 <p>SFT 的问题：在 OpenThoughts 数据集上，SFT 后模型生成长度缩短（学了简洁的参考答案的风格），反而降低了竞赛数学的表现。</p>
 <h3 id="3-6-Policy-Gradient-视角"><a href="#3-6-Policy-Gradient-视角" class="headerlink" title="3.6 Policy Gradient 视角"></a>3.6 Policy Gradient 视角</h3><p>OPSD 可以被看作一个 <strong>dense token-level reward 的 policy gradient</strong>：</p>
-<p>$$<br>r_n(x, \hat{y}) &#x3D; \log p_T(\hat{y}<em>n | x, y^*, \hat{y}</em>{&lt;n}) - \log p_S(\hat{y}<em>n | x, \hat{y}</em>{&lt;n})<br>$$</p>
-<p>这个 per-token reward 衡量的是”知道答案的模型在这个 token 上比不知道的模型更倾向于什么”。和 STaR 的对比：</p>
+$$
+r_n(x, \hat{y}) = \log p_T(\hat{y}_n | x, y^*, \hat{y}_{<n}) - \log p_S(\hat{y}_n | x, \hat{y}_{<n})$$<p>这个 per-token reward 衡量的是”知道答案的模型在这个 token 上比不知道的模型更倾向于什么”。和 STaR 的对比：</p>
 <ul>
 <li>STaR：sequence-level binary reward（全对才有梯度）</li>
 <li>OPSD：token-level dense reward（每个 token 都有梯度，即使最终答案错误）</li>
 </ul>
-<h2 id="4-GLM-5-的后训练实践"><a href="#4-GLM-5-的后训练实践" class="headerlink" title="4. GLM-5 的后训练实践"></a>4. GLM-5 的后训练实践</h2><p><strong>论文</strong>：arXiv:2602.15763 (Zhipu AI + 清华, 2026.02)<br><strong>模型</strong>：744B 总参数 &#x2F; 40B 激活参数，256 experts MoE，DSA (Dynamic Sparse Attention)</p>
+<h2 id="4-GLM-5-的后训练实践"><a href="#4-GLM-5-的后训练实践" class="headerlink" title="4. GLM-5 的后训练实践"></a>4. GLM-5 的后训练实践</h2><p><strong>论文</strong>：arXiv:2602.15763 (Zhipu AI + 清华, 2026.02)<br><strong>模型</strong>：744B 总参数 / 40B 激活参数，256 experts MoE，DSA (Dynamic Sparse Attention)</p>
 <h3 id="4-1-五阶段后训练-Pipeline"><a href="#4-1-五阶段后训练-Pipeline" class="headerlink" title="4.1 五阶段后训练 Pipeline"></a>4.1 五阶段后训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: Multi-task SFT</span><br><span class="line">    ↓</span><br><span class="line">Stage 2: Reasoning RL（GRPO，数学/代码/科学）</span><br><span class="line">    ↓</span><br><span class="line">Stage 3: Agentic RL（多轮工具调用、搜索 agent）</span><br><span class="line">    ↓</span><br><span class="line">Stage 4: General RL（基础正确性 + 情商 + 任务质量）</span><br><span class="line">    ↓</span><br><span class="line">Stage 5: On-Policy Cross-Stage Distillation ← OPD 的角色</span><br></pre></td></tr></table></figure>
-
 <h3 id="4-2-Stage-5：跨阶段-OPD"><a href="#4-2-Stage-5：跨阶段-OPD" class="headerlink" title="4.2 Stage 5：跨阶段 OPD"></a>4.2 Stage 5：跨阶段 OPD</h3><p><strong>目的</strong>：恢复前序阶段被后续 RL 退化的能力。</p>
 <p>每个 RL 阶段（Reasoning → Agentic → General）都会优化特定能力，但可能损伤其他能力（catastrophic forgetting）。Stage 5 用 OPD 从<strong>各阶段最佳 checkpoint</strong> 蒸馏回来。</p>
 <p><strong>实现</strong>：PG OPD formulation</p>
-<p>$$<br>\hat{A}<em>{i,t} &#x3D; \text{sg}\left[\log \pi</em>{\theta_{\text{teacher}}}^{\text{infer}}(y_{i,t}|x, y_{i,&lt;t}) &#x2F; \pi_{\theta}^{\text{train}}(y_{i,t}|x, y_{i,&lt;t})\right]<br>$$</p>
-<ul>
-<li>Teacher &#x3D; 前序阶段的 final checkpoint</li>
-<li>GRPO group_size &#x3D; 1（advantage 来自 teacher log-ratio，不需要 group 内对比）</li>
+$$
+\hat{A}_{i,t} = \text{sg}\left[\log \pi_{\theta_{\text{teacher}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t}) / \pi_{\theta}^{\text{train}}(y_{i,t}|x, y_{i,<t})\right]$$<ul>
+<li>Teacher = 前序阶段的 final checkpoint</li>
+<li>GRPO group_size = 1（advantage 来自 teacher log-ratio，不需要 group 内对比）</li>
 <li>支持 Multi-Teacher（Reasoning teacher + General teacher 混合路由）</li>
 </ul>
-<h3 id="4-3-异步-RL-基础设施-SLIME"><a href="#4-3-异步-RL-基础设施-SLIME" class="headerlink" title="4.3 异步 RL 基础设施 (SLIME)"></a>4.3 异步 RL 基础设施 (SLIME)</h3><p>GLM-5 的 RL 训练基于 SLIME 框架（<a target="_blank" rel="noopener" href="https://github.com/THUDM/slime%EF%BC%89%EF%BC%8C%E6%A0%B8%E5%BF%83%E4%BC%98%E5%8C%96%EF%BC%9A">https://github.com/THUDM/slime），核心优化：</a></p>
+<h3 id="4-3-异步-RL-基础设施-SLIME"><a href="#4-3-异步-RL-基础设施-SLIME" class="headerlink" title="4.3 异步 RL 基础设施 (SLIME)"></a>4.3 异步 RL 基础设施 (SLIME)</h3><p>GLM-5 的 RL 训练基于 SLIME 框架（<a target="_blank" rel="noopener" href="https://github.com/THUDM/slime），核心优化：">https://github.com/THUDM/slime），核心优化：</a></p>
 <p><strong>异步训练</strong>：generation 和 training 解耦。关键公式：</p>
-<p>$$<br>\rho_{i,t} &#x3D; \frac{\pi_{\theta_{\text{old}}}^{\text{train}}(y_{i,t}|x, y_{i,&lt;t})}{\pi_{\theta_{\text{old}}}^{\text{infer}}(y_{i,t}|x, y_{i,&lt;t})}<br>$$</p>
-<p>通过 <code>pop(ρ, 1/β, β)</code> 过滤偏离太远的样本（β&#x3D;2），保证 off-policy 修正的稳定性。</p>
+$$
+\rho_{i,t} = \frac{\pi_{\theta_{\text{old}}}^{\text{train}}(y_{i,t}|x, y_{i,<t})}{\pi_{\theta_{\text{old}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t})}$$<p>通过 <code>pop(ρ, 1/β, β)</code> 过滤偏离太远的样本（β=2），保证 off-policy 修正的稳定性。</p>
 <p><strong>尾延迟优化</strong>：</p>
 <ul>
 <li>No-queue serving：EP64 + DP64 跨 8 节点，足够 KV-cache 避免排队</li>
@@ -308,6 +466,7 @@
 <li>Benchmark：SWE-bench Verified, Terminal-Bench 2.0, BrowseComp, MCP-Atlas, τ²-Bench</li>
 </ul>
 <h2 id="5-对搜索-Agent-的启示"><a href="#5-对搜索-Agent-的启示" class="headerlink" title="5. 对搜索 Agent 的启示"></a>5. 对搜索 Agent 的启示</h2><h3 id="5-1-OPSD-在搜索-Agent-场景的适配"><a href="#5-1-OPSD-在搜索-Agent-场景的适配" class="headerlink" title="5.1 OPSD 在搜索 Agent 场景的适配"></a>5.1 OPSD 在搜索 Agent 场景的适配</h3><p>OPSD 论文在数学推理上验证，搜索 agent 场景有几个关键差异：</p>
+<div class="table-container">
 <table>
 <thead>
 <tr>
@@ -316,7 +475,8 @@
 <th>搜索 Agent</th>
 </tr>
 </thead>
-<tbody><tr>
+<tbody>
+<tr>
 <td>答案确定性</td>
 <td>唯一正确答案</td>
 <td>开放式文本</td>
@@ -336,10 +496,11 @@
 <td>数学验证器</td>
 <td>强模型（如 Claude）产出</td>
 </tr>
-</tbody></table>
+</tbody>
+</table>
+</div>
 <p><strong>适配方案</strong>：</p>
 <figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析</span><br><span class="line">   Reference answer: 截至2026年5月，金价报3218美元/盎司...&quot;</span><br></pre></td></tr></table></figure>
-
 <p><strong>Loss mask</strong>：只在 assistant 部分（think + tool_call + answer）算 loss，跳过 tool_result（外部返回的搜索结果不是模型生成的）。</p>
 <h3 id="5-2-开放问题"><a href="#5-2-开放问题" class="headerlink" title="5.2 开放问题"></a>5.2 开放问题</h3><ol>
 <li><strong>长 trajectory 的有效性</strong>：论文说早期 token 更重要（关键分支点），search agent 的第一次 search query 选择是否也是关键分支点？</li>
@@ -348,14 +509,13 @@
 <li><strong>全词表 vs 采样 token</strong>：论文推荐全词表 logit 蒸馏，但长 trajectory 的显存开销可能不可接受。GLM-5 在生产中选择了 PG OPD（采样 token）正是因为这个 trade-off。</li>
 </ol>
 <h3 id="5-3-推荐的训练-Pipeline"><a href="#5-3-推荐的训练-Pipeline" class="headerlink" title="5.3 推荐的训练 Pipeline"></a>5.3 推荐的训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: SFT 冷启动（Claude 轨迹蒸馏，学会工具格式和搜索时机）</span><br><span class="line">Stage 2: OPSD（Claude GT 文本做特权信息，dense token-level 优化）</span><br><span class="line">Stage 3: RL / GRPO（checklist + GT reward，优化搜索策略）</span><br><span class="line">Stage 4: 跨阶段 OPD（参考 GLM-5 Stage 5，恢复退化的能力）</span><br></pre></td></tr></table></figure>
-
 <h2 id="6-参考文献"><a href="#6-参考文献" class="headerlink" title="6. 参考文献"></a>6. 参考文献</h2><ul>
 <li><strong>OPSD</strong>: Zhao et al., “Self-Distilled Reasoner: On-Policy Self-Distillation for Large Language Models”, ICML 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2601.18734">arXiv:2601.18734</a></li>
 <li><strong>OPD (GKD)</strong>: Agarwal et al., “On-policy distillation of language models: Learning from self-generated mistakes”, ICLR 2024.</li>
 <li><strong>GLM-5</strong>: Zeng et al., “GLM-5: From Vibe Coding to Agentic Engineering”, 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2602.15763">arXiv:2602.15763</a></li>
 <li><strong>SLIME</strong>: Zhu et al., “slime: An LLM post-training framework for RL Scaling”, 2025. <a target="_blank" rel="noopener" href="https://github.com/THUDM/slime">GitHub</a></li>
-<li><strong>veRL OPD docs</strong>: <a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">verl.readthedocs.io&#x2F;algo&#x2F;opd</a></li>
-<li><strong>AwesomeOPD taxonomy</strong>: <a target="_blank" rel="noopener" href="https://github.com/thinkwee/AwesomeOPD">github.com&#x2F;thinkwee&#x2F;AwesomeOPD</a></li>
+<li><strong>veRL OPD docs</strong>: <a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">verl.readthedocs.io/algo/opd</a></li>
+<li><strong>AwesomeOPD taxonomy</strong>: <a target="_blank" rel="noopener" href="https://github.com/thinkwee/AwesomeOPD">github.com/thinkwee/AwesomeOPD</a></li>
 <li><strong>Qwen3</strong>: Yang et al., “Qwen3 Technical Report”, arXiv:2505.09388, 2025.</li>
 <li><strong>DeepSeek-V4</strong>: DeepSeek-AI, “DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence”, 2026.</li>
 </ul>
@@ -363,7 +523,7 @@
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfdvezw000jby6r92h81q5y" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfi9b1y000wq46r8rjgbnzt" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -374,6 +534,15 @@
   
     
 <nav id="article-nav">
+  
+    <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          MuVERA FDE 多向量检索：从原理到工程落地
+        
+      </div>
+    </a>
   
   
     <a href="/2026/01/19/cacheblend-kvcache-rag-inference/" id="article-nav-older" class="article-nav-link-wrap">
@@ -395,7 +564,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">分类</h3>
     <div class="widget">
-      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li></ul>
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%90%9C%E7%B4%A2%E6%8A%80%E6%9C%AF/">搜索技术</a></li></ul>
     </div>
   </div>
 
@@ -405,7 +574,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">标签</h3>
     <div class="widget">
-      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/ColBERT/" rel="tag">ColBERT</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MuVERA/" rel="tag">MuVERA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multi-vector/" rel="tag">multi-vector</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
     </div>
   </div>
 
@@ -415,7 +584,7 @@
   <div class="widget-wrap">
     <h3 class="widget-title">标签云</h3>
     <div class="widget tagcloud">
-      <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 10px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 10px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
+      <a href="/tags/ColBERT/" style="font-size: 10px;">ColBERT</a> <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/MuVERA/" style="font-size: 10px;">MuVERA</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 20px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multi-vector/" style="font-size: 10px;">multi-vector</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 20px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
     </div>
   </div>
 
@@ -435,6 +604,1268 @@
     <h3 class="widget-title">最新文章</h3>
     <div class="widget">
       <ul>
+        
+          <li>
+            <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/">MuVERA FDE 多向量检索：从原理到工程落地</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/cacheblend-kvcache-rag-inference/">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/jina-embeddings-v4-paper-reading/">Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Hua Chen<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>, '
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hua Chen&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Multimodal Representation &amp; AI Search</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://liric24.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-on-policy-distillation-opsd-glm5" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/20/on-policy-distillation-opsd-glm5/" class="article-date">
+  <time class="dt-published" datetime="2026-05-19T16:00:00.000Z" itemprop="datePublished">2026-05-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>大模型后训练（post-training）正在从”SFT + RLHF”的两阶段范式，演进到以 On-Policy Distillation (OPD) 为核心的新范式。本文梳理蒸馏技术从离线 KD 到 OPSD 的演进脉络，解读 OPSD 论文的核心机制，并结合 GLM-5 技术报告分析 OPD 在大规模生产中的实践。</p>
+<span id="more"></span>
+<h2 id="1-蒸馏方法演进路线"><a href="#1-蒸馏方法演进路线" class="headerlink" title="1. 蒸馏方法演进路线"></a>1. 蒸馏方法演进路线</h2><h3 id="1-1-四个阶段"><a href="#1-1-四个阶段" class="headerlink" title="1.1 四个阶段"></a>1.1 四个阶段</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">Level 1: 离线 KD (Offline Knowledge Distillation)</span><br><span class="line">  Student 在 Teacher 生成的轨迹上训练</span><br><span class="line">  → 有 exposure bias: 训练看 teacher 的路，推理走自己的路</span><br><span class="line"></span><br><span class="line">Level 2: 在线 KD (Online/Iterative KD)</span><br><span class="line">  Teacher 在线生成数据，但 student 仍在 teacher 的状态上训练</span><br><span class="line">  → 减少数据陈旧性，但 exposure bias 仍在</span><br><span class="line"></span><br><span class="line">Level 3: On-Policy Distillation (OPD)</span><br><span class="line">  Student 自己 rollout → Teacher 在 student 的状态上提供指导</span><br><span class="line">  → 消除 exposure bias，但需要外部 teacher 模型</span><br><span class="line"></span><br><span class="line">Level 4: On-Policy Self-Distillation (OPSD)</span><br><span class="line">  同一个模型同时当 student 和 teacher（通过不同 prompt 输入）</span><br><span class="line">  → 消除 exposure bias + 不需要外部 teacher</span><br></pre></td></tr></table></figure>
+<h3 id="1-2-核心对比"><a href="#1-2-核心对比" class="headerlink" title="1.2 核心对比"></a>1.2 核心对比</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>训练分布</th>
+<th>监督信号</th>
+<th>外部 Teacher</th>
+<th>Exposure Bias</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SFT</td>
+<td>teacher 的</td>
+<td>sequence-level</td>
+<td>需要轨迹</td>
+<td>有</td>
+</tr>
+<tr>
+<td>RFT</td>
+<td>student 的（筛选后）</td>
+<td>sequence-level</td>
+<td>不需要</td>
+<td>无</td>
+</tr>
+<tr>
+<td>GRPO/PPO</td>
+<td>student 的</td>
+<td>sparse reward</td>
+<td>不需要</td>
+<td>无</td>
+</tr>
+<tr>
+<td>OPD</td>
+<td>student 的</td>
+<td><strong>dense token-level</strong></td>
+<td><strong>需要 logprobs</strong></td>
+<td>无</td>
+</tr>
+<tr>
+<td><strong>OPSD</strong></td>
+<td>student 的</td>
+<td><strong>dense token-level</strong></td>
+<td><strong>不需要</strong></td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>OPSD 的独特之处：<strong>在 student 的状态分布上提供 dense token-level 监督，且不需要外部 teacher 模型</strong>。</p>
+<h2 id="2-OPD：On-Policy-Distillation"><a href="#2-OPD：On-Policy-Distillation" class="headerlink" title="2. OPD：On-Policy Distillation"></a>2. OPD：On-Policy Distillation</h2><h3 id="2-1-原理"><a href="#2-1-原理" class="headerlink" title="2.1 原理"></a>2.1 原理</h3><p>OPD (Agarwal et al., ICLR 2024) 的核心思想：</p>
+<ol>
+<li>Student 从自己的 policy 采样 rollout</li>
+<li>Teacher 在 student 生成的每个状态上给出 logprobs</li>
+<li>Student 学习匹配 teacher 在这些状态上的分布</li>
+</ol>
+<p>形式化定义：</p>
+$$
+\mathcal{L}_{\text{OPD}}(\theta) = \mathbb{E}_{x \sim p_{\text{data}},\, y \sim \pi_{\theta}(\cdot|x)} \left[ \frac{1}{|y|} \sum_{t=1}^{|y|} D\left(\pi_{\theta}(\cdot|s_t),\, \nu(\cdot|s_t)\right) \right]$$<p>其中 $\pi_\theta$ 是 student，$\nu$ 是 teacher，$s_t = (x, y_{&lt;t})$ 是 student 自己走到的状态。</p>
+<h3 id="2-2-两种-Loss-变体"><a href="#2-2-两种-Loss-变体" class="headerlink" title="2.2 两种 Loss 变体"></a>2.2 两种 Loss 变体</h3><p><strong>GKD OPD（forward KL，需要 teacher 完整分布）</strong>：</p>
+$$
+D(s_t) = \sum_{v \in V} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<p>直接通过 student 概率反向传播。使用 teacher 的 full distributional signal，精度高但显存开销大。</p>
+<p><strong>PG OPD（reverse KL 的单样本估计，只需 teacher 的一个 logprob）</strong>：</p>
+$$
+r_t = \text{sg}\left[\log \nu(y_t|s_t) - \log \pi_\theta(y_t|s_t)\right]$$<p>把 teacher 和 student 的 log probability 之差作为 per-token reward，通过 policy gradient 更新。stop-gradient 是必须的——否则梯度会忽略 teacher 信号。</p>
+<h3 id="2-3-Forward-KL-vs-Reverse-KL"><a href="#2-3-Forward-KL-vs-Reverse-KL" class="headerlink" title="2.3 Forward KL vs Reverse KL"></a>2.3 Forward KL vs Reverse KL</h3><p>给定 Teacher 分布 $\nu$ 和 Student 分布 $\pi_\theta$，有两个方向的 KL：</p>
+<p><strong>Forward KL</strong>（Teacher 视角，”Teacher 觉得 Student 差在哪”）：</p>
+$$
+\text{KL}(\nu \| \pi_\theta) = \sum_{v \in \mathcal{V}} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>由 Teacher 分布 $\nu$ 加权</li>
+<li>Teacher 认为重要的 token（$\nu$ 大的），如果 Student 概率低 → 惩罚大</li>
+<li><strong>Mode-covering</strong>：Student 被鼓励覆盖 Teacher 的所有模式</li>
+<li>需要 Teacher 的<strong>完整 top-k 分布</strong>（GKD OPD 用这个）</li>
+</ul>
+<p><strong>Reverse KL</strong>（Student 视角，”Student 和 Teacher 差多少”）：</p>
+$$
+\text{KL}(\pi_\theta \| \nu) = \sum_{v \in \mathcal{V}} \pi_\theta(v|s_t) \log \frac{\pi_\theta(v|s_t)}{\nu(v|s_t)}$$<ul>
+<li>由 Student 分布 $\pi_\theta$ 加权</li>
+<li>Student 自己概率高的 token，如果 Teacher 概率低 → 惩罚大</li>
+<li><strong>Mode-seeking</strong>：Student 集中学 Teacher 最强的模式，放弃弱模式</li>
+<li>可以用<strong>单样本估计</strong>（只需要 Teacher 在采样 token 上的一个 logprob）</li>
+</ul>
+<p><strong>为什么 PG OPD 用 Reverse KL</strong>：Student 采样一个 $y_t \sim \pi_\theta$，就能得到 reverse KL 的<strong>无偏单样本估计</strong>：</p>
+$$
+\widehat{\text{KL}} = \log \pi_\theta(y_t|s_t) - \log \nu(y_t|s_t)$$<p>Forward KL 做不到这一点——它需要 $\nu$ 的完整分布才能计算。</p>
+<p><strong>直觉对比</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">Forward KL (mode-covering):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(55%) B(45%)&quot; → 两个都覆盖 ✓</span><br><span class="line">  适合: 不想遗漏任何 Teacher 知道的可能性</span><br><span class="line">  缺点: 需要完整分布，计算贵</span><br><span class="line"></span><br><span class="line">Reverse KL (mode-seeking):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(90%) B(10%)&quot; → 集中学最强的 ✓</span><br><span class="line">  适合: 只需要一个 logprob，计算便宜</span><br><span class="line">  缺点: 可能丢掉 Teacher 的次优模式</span><br></pre></td></tr></table></figure>
+<h3 id="2-4-veRL-的-Reverse-KL-估计器"><a href="#2-4-veRL-的-Reverse-KL-估计器" class="headerlink" title="2.4 veRL 的 Reverse KL 估计器"></a>2.4 veRL 的 Reverse KL 估计器</h3><p>定义 importance ratio：$\rho_t = \frac{\nu(y_t|s_t)}{\pi_\theta(y_t|s_t)}$</p>
+<p>所有估计器都是 $\rho$ 的函数：</p>
+<p><strong>k1（Log-ratio）</strong>：$D_{k1}(\rho) = \log \rho$</p>
+<ul>
+<li>reverse KL 的直接单样本估计，无偏</li>
+<li>问题：$\rho \to 0$ 时 $\log \rho \to -\infty$（梯度爆炸）</li>
+<li>用途：GLM-5、OPSD 论文</li>
+</ul>
+<p><strong>k2（Chi-squared）</strong>：$D_{k2}(\rho) = \frac{1}{2}(\rho - 1)^2$</p>
+<ul>
+<li>$\chi^2$ 散度估计，对称</li>
+<li>问题：$\rho$ 很大时惩罚 $O(\rho^2)$</li>
+</ul>
+<p><strong>k3（Pinsker 风格，veRL 默认）</strong>：$D_{k3}(\rho) = \rho - 1 - \log \rho$</p>
+<ul>
+<li>永远非负，稳定性最好</li>
+<li>$\rho \to 0$ 时不像 k1 那样爆炸，$\rho \to \infty$ 时线性增长（不像 k2 平方增长）</li>
+<li>来源：DeepSeek-V4 采用</li>
+</ul>
+<p><strong>数值对比</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>$\rho$</th>
+<th>含义</th>
+<th>k1</th>
+<th>k2</th>
+<th>k3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.01</td>
+<td>Student 极不对</td>
+<td>-4.61</td>
+<td>0.49</td>
+<td><strong>3.62</strong></td>
+</tr>
+<tr>
+<td>0.1</td>
+<td>Student 不太对</td>
+<td>-2.30</td>
+<td>0.41</td>
+<td><strong>1.40</strong></td>
+</tr>
+<tr>
+<td>0.5</td>
+<td>Student 偏弱</td>
+<td>-0.69</td>
+<td>0.13</td>
+<td><strong>0.19</strong></td>
+</tr>
+<tr>
+<td>1.0</td>
+<td>完美一致</td>
+<td>0</td>
+<td>0</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td>2.0</td>
+<td>Teacher 更强</td>
+<td>0.69</td>
+<td>0.50</td>
+<td><strong>0.31</strong></td>
+</tr>
+<tr>
+<td>10.0</td>
+<td>差异极大</td>
+<td>2.30</td>
+<td>40.50</td>
+<td><strong>6.70</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>如何选择</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通用 OPD</td>
+<td><strong>k3</strong></td>
+<td>稳定，DeepSeek-V4 验证</td>
+</tr>
+<tr>
+<td>数学推理（答案确定性高）</td>
+<td>k1 或 k3</td>
+<td>k1 更简单，但需要 clipping</td>
+</tr>
+<tr>
+<td>搜索 Agent（答案开放性高）</td>
+<td><strong>k3</strong></td>
+<td>Teacher/Student 分布可能差异大，k3 更稳定</td>
+</tr>
+<tr>
+<td>需要完整分布信号</td>
+<td><strong>forward_kl_topk</strong></td>
+<td>GKD 模式，精度最高但贵</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="2-5-Forward-KL-Top-K（GKD-OPD）"><a href="#2-5-Forward-KL-Top-K（GKD-OPD）" class="headerlink" title="2.5 Forward KL Top-K（GKD OPD）"></a>2.5 Forward KL Top-K（GKD OPD）</h3><p>与单样本估计器完全不同——使用 Teacher 的完整 top-k 分布：</p>
+$$
+D_{\text{fkl\_topk}}(s_t) = \sum_{v \in \text{TopK}(\nu(\cdot|s_t))} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>需要 Teacher 返回 top-k 个 token 的概率（默认 k=32）</li>
+<li>直接对 Student 概率反向传播（不走 policy gradient）</li>
+<li>信号最 dense（每个位置有 k 个 token 的分布信息）</li>
+<li>显存开销大（需要存 k × sequence_length 的 logit tensor）</li>
+</ul>
+<p>OPSD 论文实验表明 Forward KL &gt; Reverse KL（Table 3），但 GLM-5 在生产中选了 PG OPD (k1)，因为长 trajectory 的显存开销不允许 forward KL。</p>
+<h3 id="2-6-Multi-Teacher-OPD-MOPD"><a href="#2-6-Multi-Teacher-OPD-MOPD" class="headerlink" title="2.6 Multi-Teacher OPD (MOPD)"></a>2.6 Multi-Teacher OPD (MOPD)</h3><p>多个领域专家 teacher 同时蒸馏到一个 student。每个训练样本通过 <code>teacher_key</code> 路由到对应的 teacher。</p>
+<p>已在生产中使用：GLM-5、Qwen3、Nemotron-Cascade 2、MiMo-v2-flash、DeepSeek-V4。</p>
+<h3 id="2-7-veRL-的-OPD-实现"><a href="#2-7-veRL-的-OPD-实现" class="headerlink" title="2.7 veRL 的 OPD 实现"></a>2.7 veRL 的 OPD 实现</h3><p>veRL 已有完整的 OPD 实现（<a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">文档</a>），支持：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>loss_mode</code></td>
+<td><code>k3</code>（默认）、<code>k1</code>、<code>forward_kl_topk</code> 等</td>
+</tr>
+<tr>
+<td><code>use_task_rewards</code></td>
+<td>是否叠加 RL reward（默认 true）</td>
+</tr>
+<tr>
+<td><code>distillation_loss_coef</code></td>
+<td>蒸馏 loss 权重（默认 1.0）</td>
+</tr>
+<tr>
+<td><code>loss_max_clamp</code></td>
+<td>per-token loss 截断</td>
+</tr>
+<tr>
+<td>多 Teacher</td>
+<td>支持，通过 <code>teacher_models</code> 配置</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="3-OPSD：On-Policy-Self-Distillation"><a href="#3-OPSD：On-Policy-Self-Distillation" class="headerlink" title="3. OPSD：On-Policy Self-Distillation"></a>3. OPSD：On-Policy Self-Distillation</h2><p><strong>论文</strong>：arXiv:2601.18734 (Siyan Zhao et al., UCLA + Meta, ICML 2026)<br><strong>代码</strong>：<a target="_blank" rel="noopener" href="https://github.com/siyan-zhao/OPSD">https://github.com/siyan-zhao/OPSD</a></p>
+<h3 id="3-1-核心机制"><a href="#3-1-核心机制" class="headerlink" title="3.1 核心机制"></a>3.1 核心机制</h3><p>同一个模型，不同的输入，分别扮演 Student 和 Teacher：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Student: p_S(·|x)         ← 只看问题（模拟推理时）</span><br><span class="line">Teacher: p_T(·|x, y*)     ← 看问题 + 正确答案（特权信息）</span><br><span class="line"></span><br><span class="line">两者共享同一套参数！</span><br><span class="line">Teacher 不生成 token，只做一次 forward pass 算 logprobs。</span><br></pre></td></tr></table></figure>
+<p><strong>直觉</strong>：rationalization（知道答案后理解推理步骤）比 generation（从零推理）容易得多。给模型看正确答案后，它在 student 走过的每个状态上都能提供更好的 token 分布。</p>
+<h3 id="3-2-算法流程"><a href="#3-2-算法流程" class="headerlink" title="3.2 算法流程"></a>3.2 算法流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Input: 数据集 S = &#123;(x_i, y_i*)&#125;，模型 p_θ，散度 D</span><br><span class="line">While not converged:</span><br><span class="line">    Sample minibatch B from S</span><br><span class="line">    For each (x, y*) in B:</span><br><span class="line">        1. Student rollout: ŷ ~ p_S(·|x)          [on-policy 采样]</span><br><span class="line">        2. Student forward: p_S(yₙ|x, ŷ&lt;n)        [不知道答案]</span><br><span class="line">        3. Teacher forward: p_T(yₙ|x, y*, ŷ&lt;n)    [知道答案]</span><br><span class="line">        4. Per-token loss: D(p_T || p_S) at each n</span><br><span class="line">    Update θ (梯度只流过 p_S，不流过 p_T)</span><br></pre></td></tr></table></figure>
+<h3 id="3-3-Prompt-构造"><a href="#3-3-Prompt-构造" class="headerlink" title="3.3 Prompt 构造"></a>3.3 Prompt 构造</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;Problem: [问题]\nAnswer:&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;Problem: [问题]\nHere is a reference solution: [y*]\n</span><br><span class="line">   After understanding the reference solution, please try to solve</span><br><span class="line">   this problem using your own approach below:\nAnswer:&quot;</span><br></pre></td></tr></table></figure>
+<p>Teacher 的 prompt 里包含正确答案 y*，但它不生成任何 token——只对 student 的 rollout ŷ 做一次 forward pass，算出每个位置的 logprobs。</p>
+<h3 id="3-4-关键设计决策"><a href="#3-4-关键设计决策" class="headerlink" title="3.4 关键设计决策"></a>3.4 关键设计决策</h3><p><strong>Teacher 固定为初始 checkpoint</strong>：训练过程中不更新 teacher 权重。这样做的好处：</p>
+<ul>
+<li>稳定训练</li>
+<li>隐式正则化：防止 student 偏离初始 policy 太远（类似 GRPO/PPO 中对 reference policy 的 KL penalty）</li>
+</ul>
+<p><strong>Thinking Mode 选择（Qwen3 场景）</strong>：</p>
+<ul>
+<li>最佳组合：Student TM-off + Teacher TM-on</li>
+<li>原因：Teacher 开 thinking 后，在数学相关 token 上的 KL 差异最大 → 监督信号最强</li>
+</ul>
+<p><strong>Per-Token Pointwise KL Clipping</strong>：</p>
+<ul>
+<li>问题：stylistic tokens（”wait”、”however”、”therefore”）的 KL divergence 远高于数学 tokens，会主导训练信号</li>
+<li>解法：per-token pointwise clip，截断每个 token 位置上的最大 KL 贡献：</li>
+</ul>
+$$
+D_{\text{clip}}(p_T \| p_S) = \frac{1}{|\hat{y}|} \sum_n \sum_{v \in \mathcal{V}} \min\!\left(\ell_{n,v},\; \tau\right)$$<ul>
+<li>效果：防止性能崩塌，尤其在 OPSD 快速收敛（~100 steps）时尤为重要</li>
+</ul>
+<p><strong>OPSD Loss（JSD 散度）</strong>：</p>
+$$
+\text{JSD}_\beta(p_T \| p_S) = \beta \cdot \text{KL}(p_T \| m) + (1-\beta) \cdot \text{KL}(p_S \| m)$$<p>其中 $m = \beta \cdot p_T + (1-\beta) \cdot p_S$。实验表明 Forward KL 效果最好（Table 3, Qwen3-1.7B AIME25: Forward KL 43.9 vs Reverse KL 限制增益）。</p>
+<h3 id="3-5-核心实验结果"><a href="#3-5-核心实验结果" class="headerlink" title="3.5 核心实验结果"></a>3.5 核心实验结果</h3><p>在竞赛级数学推理 benchmark 上：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>Token 预算/题</th>
+<th>Rollouts/题</th>
+<th>收敛步数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GRPO</td>
+<td>~128K tokens (8×16K)</td>
+<td>8</td>
+<td>~500</td>
+</tr>
+<tr>
+<td><strong>OPSD</strong></td>
+<td><strong>~1K tokens</strong></td>
+<td><strong>1</strong></td>
+<td><strong>~100</strong></td>
+</tr>
+<tr>
+<td>SFT</td>
+<td>~1K tokens</td>
+<td>-</td>
+<td>~200</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>OPSD 的 token 效率比 GRPO 高 128 倍</strong>，同时效果相当或更好。</p>
+<p>GRPO 的问题：在 100 步内，&gt;50% 的 batch 出现 reward diversity collapse（全对或全错），梯度信号为零。OPSD 的 dense token-level loss 完全不受此影响——答对答错都有学习信号。</p>
+<p>SFT 的问题：在 OpenThoughts 数据集上，SFT 后模型生成长度缩短（学了简洁的参考答案的风格），反而降低了竞赛数学的表现。</p>
+<h3 id="3-6-Policy-Gradient-视角"><a href="#3-6-Policy-Gradient-视角" class="headerlink" title="3.6 Policy Gradient 视角"></a>3.6 Policy Gradient 视角</h3><p>OPSD 可以被看作一个 <strong>dense token-level reward 的 policy gradient</strong>：</p>
+$$
+r_n(x, \hat{y}) = \log p_T(\hat{y}_n | x, y^*, \hat{y}_{<n}) - \log p_S(\hat{y}_n | x, \hat{y}_{<n})$$<p>这个 per-token reward 衡量的是”知道答案的模型在这个 token 上比不知道的模型更倾向于什么”。和 STaR 的对比：</p>
+<ul>
+<li>STaR：sequence-level binary reward（全对才有梯度）</li>
+<li>OPSD：token-level dense reward（每个 token 都有梯度，即使最终答案错误）</li>
+</ul>
+<h2 id="4-GLM-5-的后训练实践"><a href="#4-GLM-5-的后训练实践" class="headerlink" title="4. GLM-5 的后训练实践"></a>4. GLM-5 的后训练实践</h2><p><strong>论文</strong>：arXiv:2602.15763 (Zhipu AI + 清华, 2026.02)<br><strong>模型</strong>：744B 总参数 / 40B 激活参数，256 experts MoE，DSA (Dynamic Sparse Attention)</p>
+<h3 id="4-1-五阶段后训练-Pipeline"><a href="#4-1-五阶段后训练-Pipeline" class="headerlink" title="4.1 五阶段后训练 Pipeline"></a>4.1 五阶段后训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: Multi-task SFT</span><br><span class="line">    ↓</span><br><span class="line">Stage 2: Reasoning RL（GRPO，数学/代码/科学）</span><br><span class="line">    ↓</span><br><span class="line">Stage 3: Agentic RL（多轮工具调用、搜索 agent）</span><br><span class="line">    ↓</span><br><span class="line">Stage 4: General RL（基础正确性 + 情商 + 任务质量）</span><br><span class="line">    ↓</span><br><span class="line">Stage 5: On-Policy Cross-Stage Distillation ← OPD 的角色</span><br></pre></td></tr></table></figure>
+<h3 id="4-2-Stage-5：跨阶段-OPD"><a href="#4-2-Stage-5：跨阶段-OPD" class="headerlink" title="4.2 Stage 5：跨阶段 OPD"></a>4.2 Stage 5：跨阶段 OPD</h3><p><strong>目的</strong>：恢复前序阶段被后续 RL 退化的能力。</p>
+<p>每个 RL 阶段（Reasoning → Agentic → General）都会优化特定能力，但可能损伤其他能力（catastrophic forgetting）。Stage 5 用 OPD 从<strong>各阶段最佳 checkpoint</strong> 蒸馏回来。</p>
+<p><strong>实现</strong>：PG OPD formulation</p>
+$$
+\hat{A}_{i,t} = \text{sg}\left[\log \pi_{\theta_{\text{teacher}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t}) / \pi_{\theta}^{\text{train}}(y_{i,t}|x, y_{i,<t})\right]$$<ul>
+<li>Teacher = 前序阶段的 final checkpoint</li>
+<li>GRPO group_size = 1（advantage 来自 teacher log-ratio，不需要 group 内对比）</li>
+<li>支持 Multi-Teacher（Reasoning teacher + General teacher 混合路由）</li>
+</ul>
+<h3 id="4-3-异步-RL-基础设施-SLIME"><a href="#4-3-异步-RL-基础设施-SLIME" class="headerlink" title="4.3 异步 RL 基础设施 (SLIME)"></a>4.3 异步 RL 基础设施 (SLIME)</h3><p>GLM-5 的 RL 训练基于 SLIME 框架（<a target="_blank" rel="noopener" href="https://github.com/THUDM/slime），核心优化：">https://github.com/THUDM/slime），核心优化：</a></p>
+<p><strong>异步训练</strong>：generation 和 training 解耦。关键公式：</p>
+$$
+\rho_{i,t} = \frac{\pi_{\theta_{\text{old}}}^{\text{train}}(y_{i,t}|x, y_{i,<t})}{\pi_{\theta_{\text{old}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t})}$$<p>通过 <code>pop(ρ, 1/β, β)</code> 过滤偏离太远的样本（β=2），保证 off-policy 修正的稳定性。</p>
+<p><strong>尾延迟优化</strong>：</p>
+<ul>
+<li>No-queue serving：EP64 + DP64 跨 8 节点，足够 KV-cache 避免排队</li>
+<li>FP8 rollouts + MTP：减少 per-token 延迟</li>
+<li>PD 分离（Prefill-Decode Disaggregation）：prefill 和 decode 分离到不同节点</li>
+</ul>
+<p><strong>Thinking Mode 创新</strong>（三种模式统一）：</p>
+<ol>
+<li>Always-on thinking：标准 CoT 推理</li>
+<li>Always-off thinking：直接回答，低延迟</li>
+<li><strong>Interleaved Thinking</strong>：turn-level 控制——简单请求关闭 thinking，复杂任务开启 thinking，同一个 session 内动态调整</li>
+</ol>
+<h3 id="4-4-Agentic-RL（Stage-3）"><a href="#4-4-Agentic-RL（Stage-3）" class="headerlink" title="4.4 Agentic RL（Stage 3）"></a>4.4 Agentic RL（Stage 3）</h3><p>GLM-5 的 agentic RL 覆盖：前后端编程、工具调用、搜索 agent、通用 agent。</p>
+<p>核心特点：</p>
+<ul>
+<li>异步 GRPO 在完整的多轮 trajectory 上训练</li>
+<li>支持工具调用和环境反馈</li>
+<li>Benchmark：SWE-bench Verified, Terminal-Bench 2.0, BrowseComp, MCP-Atlas, τ²-Bench</li>
+</ul>
+<h2 id="5-对搜索-Agent-的启示"><a href="#5-对搜索-Agent-的启示" class="headerlink" title="5. 对搜索 Agent 的启示"></a>5. 对搜索 Agent 的启示</h2><h3 id="5-1-OPSD-在搜索-Agent-场景的适配"><a href="#5-1-OPSD-在搜索-Agent-场景的适配" class="headerlink" title="5.1 OPSD 在搜索 Agent 场景的适配"></a>5.1 OPSD 在搜索 Agent 场景的适配</h3><p>OPSD 论文在数学推理上验证，搜索 agent 场景有几个关键差异：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>差异点</th>
+<th>数学推理</th>
+<th>搜索 Agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>答案确定性</td>
+<td>唯一正确答案</td>
+<td>开放式文本</td>
+</tr>
+<tr>
+<td>Trajectory 长度</td>
+<td>~1K tokens</td>
+<td>5K-10K tokens（含 tool results）</td>
+</tr>
+<tr>
+<td>外部交互</td>
+<td>无</td>
+<td>搜索调用、网页抓取</td>
+</tr>
+<tr>
+<td>GT 来源</td>
+<td>数学验证器</td>
+<td>强模型（如 Claude）产出</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>适配方案</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析</span><br><span class="line">   Reference answer: 截至2026年5月，金价报3218美元/盎司...&quot;</span><br></pre></td></tr></table></figure>
+<p><strong>Loss mask</strong>：只在 assistant 部分（think + tool_call + answer）算 loss，跳过 tool_result（外部返回的搜索结果不是模型生成的）。</p>
+<h3 id="5-2-开放问题"><a href="#5-2-开放问题" class="headerlink" title="5.2 开放问题"></a>5.2 开放问题</h3><ol>
+<li><strong>长 trajectory 的有效性</strong>：论文说早期 token 更重要（关键分支点），search agent 的第一次 search query 选择是否也是关键分支点？</li>
+<li><strong>开放式答案的 rationalization 质量</strong>：数学答案是唯一的，Teacher rationalization 精准。搜索答案是开放的，Teacher 能否有效 rationalize？</li>
+<li><strong>Teacher 过期</strong>：OPSD 固定 teacher 为初始 checkpoint。如果模型快速学会新工具，初始 teacher 可能给出过时指导。何时刷新？</li>
+<li><strong>全词表 vs 采样 token</strong>：论文推荐全词表 logit 蒸馏，但长 trajectory 的显存开销可能不可接受。GLM-5 在生产中选择了 PG OPD（采样 token）正是因为这个 trade-off。</li>
+</ol>
+<h3 id="5-3-推荐的训练-Pipeline"><a href="#5-3-推荐的训练-Pipeline" class="headerlink" title="5.3 推荐的训练 Pipeline"></a>5.3 推荐的训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: SFT 冷启动（Claude 轨迹蒸馏，学会工具格式和搜索时机）</span><br><span class="line">Stage 2: OPSD（Claude GT 文本做特权信息，dense token-level 优化）</span><br><span class="line">Stage 3: RL / GRPO（checklist + GT reward，优化搜索策略）</span><br><span class="line">Stage 4: 跨阶段 OPD（参考 GLM-5 Stage 5，恢复退化的能力）</span><br></pre></td></tr></table></figure>
+<h2 id="6-参考文献"><a href="#6-参考文献" class="headerlink" title="6. 参考文献"></a>6. 参考文献</h2><ul>
+<li><strong>OPSD</strong>: Zhao et al., “Self-Distilled Reasoner: On-Policy Self-Distillation for Large Language Models”, ICML 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2601.18734">arXiv:2601.18734</a></li>
+<li><strong>OPD (GKD)</strong>: Agarwal et al., “On-policy distillation of language models: Learning from self-generated mistakes”, ICLR 2024.</li>
+<li><strong>GLM-5</strong>: Zeng et al., “GLM-5: From Vibe Coding to Agentic Engineering”, 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2602.15763">arXiv:2602.15763</a></li>
+<li><strong>SLIME</strong>: Zhu et al., “slime: An LLM post-training framework for RL Scaling”, 2025. <a target="_blank" rel="noopener" href="https://github.com/THUDM/slime">GitHub</a></li>
+<li><strong>veRL OPD docs</strong>: <a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">verl.readthedocs.io/algo/opd</a></li>
+<li><strong>AwesomeOPD taxonomy</strong>: <a target="_blank" rel="noopener" href="https://github.com/thinkwee/AwesomeOPD">github.com/thinkwee/AwesomeOPD</a></li>
+<li><strong>Qwen3</strong>: Yang et al., “Qwen3 Technical Report”, arXiv:2505.09388, 2025.</li>
+<li><strong>DeepSeek-V4</strong>: DeepSeek-AI, “DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence”, 2026.</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfi9b1y000wq46r8rjgbnzt" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          MuVERA FDE 多向量检索：从原理到工程落地
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/01/19/cacheblend-kvcache-rag-inference/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%90%9C%E7%B4%A2%E6%8A%80%E6%9C%AF/">搜索技术</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/ColBERT/" rel="tag">ColBERT</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MuVERA/" rel="tag">MuVERA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multi-vector/" rel="tag">multi-vector</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/ColBERT/" style="font-size: 10px;">ColBERT</a> <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/MuVERA/" style="font-size: 10px;">MuVERA</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 20px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multi-vector/" style="font-size: 10px;">multi-vector</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 20px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/01/">一月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/">MuVERA FDE 多向量检索：从原理到工程落地</a>
+          </li>
+        
+          <li>
+            <a href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/cacheblend-kvcache-rag-inference/">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/jina-embeddings-v4-paper-reading/">Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Hua Chen<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>]],
+    displayMath: [['$', '$']],
+    processEscapes: true
+  },
+  options: {
+    skipHtmlTags: ['noscript', 'style', 'textarea', 'pre', 'code']
+  }
+};
+</script>
+<script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js" async></script>
+</head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hua Chen&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Multimodal Representation &amp; AI Search</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://liric24.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main"><article id="post-on-policy-distillation-opsd-glm5" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/20/on-policy-distillation-opsd-glm5/" class="article-date">
+  <time class="dt-published" datetime="2026-05-19T16:00:00.000Z" itemprop="datePublished">2026-05-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 class="p-name article-title" itemprop="headline name">
+      从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>大模型后训练（post-training）正在从”SFT + RLHF”的两阶段范式，演进到以 On-Policy Distillation (OPD) 为核心的新范式。本文梳理蒸馏技术从离线 KD 到 OPSD 的演进脉络，解读 OPSD 论文的核心机制，并结合 GLM-5 技术报告分析 OPD 在大规模生产中的实践。</p>
+<span id="more"></span>
+<h2 id="1-蒸馏方法演进路线"><a href="#1-蒸馏方法演进路线" class="headerlink" title="1. 蒸馏方法演进路线"></a>1. 蒸馏方法演进路线</h2><h3 id="1-1-四个阶段"><a href="#1-1-四个阶段" class="headerlink" title="1.1 四个阶段"></a>1.1 四个阶段</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br><span class="line">12</span><br><span class="line">13</span><br><span class="line">14</span><br><span class="line">15</span><br></pre></td><td class="code"><pre><span class="line">Level 1: 离线 KD (Offline Knowledge Distillation)</span><br><span class="line">  Student 在 Teacher 生成的轨迹上训练</span><br><span class="line">  → 有 exposure bias: 训练看 teacher 的路，推理走自己的路</span><br><span class="line"></span><br><span class="line">Level 2: 在线 KD (Online/Iterative KD)</span><br><span class="line">  Teacher 在线生成数据，但 student 仍在 teacher 的状态上训练</span><br><span class="line">  → 减少数据陈旧性，但 exposure bias 仍在</span><br><span class="line"></span><br><span class="line">Level 3: On-Policy Distillation (OPD)</span><br><span class="line">  Student 自己 rollout → Teacher 在 student 的状态上提供指导</span><br><span class="line">  → 消除 exposure bias，但需要外部 teacher 模型</span><br><span class="line"></span><br><span class="line">Level 4: On-Policy Self-Distillation (OPSD)</span><br><span class="line">  同一个模型同时当 student 和 teacher（通过不同 prompt 输入）</span><br><span class="line">  → 消除 exposure bias + 不需要外部 teacher</span><br></pre></td></tr></table></figure>
+<h3 id="1-2-核心对比"><a href="#1-2-核心对比" class="headerlink" title="1.2 核心对比"></a>1.2 核心对比</h3><div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>训练分布</th>
+<th>监督信号</th>
+<th>外部 Teacher</th>
+<th>Exposure Bias</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SFT</td>
+<td>teacher 的</td>
+<td>sequence-level</td>
+<td>需要轨迹</td>
+<td>有</td>
+</tr>
+<tr>
+<td>RFT</td>
+<td>student 的（筛选后）</td>
+<td>sequence-level</td>
+<td>不需要</td>
+<td>无</td>
+</tr>
+<tr>
+<td>GRPO/PPO</td>
+<td>student 的</td>
+<td>sparse reward</td>
+<td>不需要</td>
+<td>无</td>
+</tr>
+<tr>
+<td>OPD</td>
+<td>student 的</td>
+<td><strong>dense token-level</strong></td>
+<td><strong>需要 logprobs</strong></td>
+<td>无</td>
+</tr>
+<tr>
+<td><strong>OPSD</strong></td>
+<td>student 的</td>
+<td><strong>dense token-level</strong></td>
+<td><strong>不需要</strong></td>
+<td>无</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p>OPSD 的独特之处：<strong>在 student 的状态分布上提供 dense token-level 监督，且不需要外部 teacher 模型</strong>。</p>
+<h2 id="2-OPD：On-Policy-Distillation"><a href="#2-OPD：On-Policy-Distillation" class="headerlink" title="2. OPD：On-Policy Distillation"></a>2. OPD：On-Policy Distillation</h2><h3 id="2-1-原理"><a href="#2-1-原理" class="headerlink" title="2.1 原理"></a>2.1 原理</h3><p>OPD (Agarwal et al., ICLR 2024) 的核心思想：</p>
+<ol>
+<li>Student 从自己的 policy 采样 rollout</li>
+<li>Teacher 在 student 生成的每个状态上给出 logprobs</li>
+<li>Student 学习匹配 teacher 在这些状态上的分布</li>
+</ol>
+<p>形式化定义：</p>
+$$
+\mathcal{L}_{\text{OPD}}(\theta) = \mathbb{E}_{x \sim p_{\text{data}},\, y \sim \pi_{\theta}(\cdot|x)} \left[ \frac{1}{|y|} \sum_{t=1}^{|y|} D\left(\pi_{\theta}(\cdot|s_t),\, \nu(\cdot|s_t)\right) \right]$$<p>其中 $\pi_\theta$ 是 student，$\nu$ 是 teacher，$s_t = (x, y_{&lt;t})$ 是 student 自己走到的状态。</p>
+<h3 id="2-2-两种-Loss-变体"><a href="#2-2-两种-Loss-变体" class="headerlink" title="2.2 两种 Loss 变体"></a>2.2 两种 Loss 变体</h3><p><strong>GKD OPD（forward KL，需要 teacher 完整分布）</strong>：</p>
+$$
+D(s_t) = \sum_{v \in V} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<p>直接通过 student 概率反向传播。使用 teacher 的 full distributional signal，精度高但显存开销大。</p>
+<p><strong>PG OPD（reverse KL 的单样本估计，只需 teacher 的一个 logprob）</strong>：</p>
+$$
+r_t = \text{sg}\left[\log \nu(y_t|s_t) - \log \pi_\theta(y_t|s_t)\right]$$<p>把 teacher 和 student 的 log probability 之差作为 per-token reward，通过 policy gradient 更新。stop-gradient 是必须的——否则梯度会忽略 teacher 信号。</p>
+<h3 id="2-3-Forward-KL-vs-Reverse-KL"><a href="#2-3-Forward-KL-vs-Reverse-KL" class="headerlink" title="2.3 Forward KL vs Reverse KL"></a>2.3 Forward KL vs Reverse KL</h3><p>给定 Teacher 分布 $\nu$ 和 Student 分布 $\pi_\theta$，有两个方向的 KL：</p>
+<p><strong>Forward KL</strong>（Teacher 视角，”Teacher 觉得 Student 差在哪”）：</p>
+$$
+\text{KL}(\nu \| \pi_\theta) = \sum_{v \in \mathcal{V}} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>由 Teacher 分布 $\nu$ 加权</li>
+<li>Teacher 认为重要的 token（$\nu$ 大的），如果 Student 概率低 → 惩罚大</li>
+<li><strong>Mode-covering</strong>：Student 被鼓励覆盖 Teacher 的所有模式</li>
+<li>需要 Teacher 的<strong>完整 top-k 分布</strong>（GKD OPD 用这个）</li>
+</ul>
+<p><strong>Reverse KL</strong>（Student 视角，”Student 和 Teacher 差多少”）：</p>
+$$
+\text{KL}(\pi_\theta \| \nu) = \sum_{v \in \mathcal{V}} \pi_\theta(v|s_t) \log \frac{\pi_\theta(v|s_t)}{\nu(v|s_t)}$$<ul>
+<li>由 Student 分布 $\pi_\theta$ 加权</li>
+<li>Student 自己概率高的 token，如果 Teacher 概率低 → 惩罚大</li>
+<li><strong>Mode-seeking</strong>：Student 集中学 Teacher 最强的模式，放弃弱模式</li>
+<li>可以用<strong>单样本估计</strong>（只需要 Teacher 在采样 token 上的一个 logprob）</li>
+</ul>
+<p><strong>为什么 PG OPD 用 Reverse KL</strong>：Student 采样一个 $y_t \sim \pi_\theta$，就能得到 reverse KL 的<strong>无偏单样本估计</strong>：</p>
+$$
+\widehat{\text{KL}} = \log \pi_\theta(y_t|s_t) - \log \nu(y_t|s_t)$$<p>Forward KL 做不到这一点——它需要 $\nu$ 的完整分布才能计算。</p>
+<p><strong>直觉对比</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br><span class="line">10</span><br><span class="line">11</span><br></pre></td><td class="code"><pre><span class="line">Forward KL (mode-covering):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(55%) B(45%)&quot; → 两个都覆盖 ✓</span><br><span class="line">  适合: 不想遗漏任何 Teacher 知道的可能性</span><br><span class="line">  缺点: 需要完整分布，计算贵</span><br><span class="line"></span><br><span class="line">Reverse KL (mode-seeking):</span><br><span class="line">  Teacher: &quot;答案可能是 A(60%) 或 B(40%)&quot;</span><br><span class="line">  Student 学到: &quot;A(90%) B(10%)&quot; → 集中学最强的 ✓</span><br><span class="line">  适合: 只需要一个 logprob，计算便宜</span><br><span class="line">  缺点: 可能丢掉 Teacher 的次优模式</span><br></pre></td></tr></table></figure>
+<h3 id="2-4-veRL-的-Reverse-KL-估计器"><a href="#2-4-veRL-的-Reverse-KL-估计器" class="headerlink" title="2.4 veRL 的 Reverse KL 估计器"></a>2.4 veRL 的 Reverse KL 估计器</h3><p>定义 importance ratio：$\rho_t = \frac{\nu(y_t|s_t)}{\pi_\theta(y_t|s_t)}$</p>
+<p>所有估计器都是 $\rho$ 的函数：</p>
+<p><strong>k1（Log-ratio）</strong>：$D_{k1}(\rho) = \log \rho$</p>
+<ul>
+<li>reverse KL 的直接单样本估计，无偏</li>
+<li>问题：$\rho \to 0$ 时 $\log \rho \to -\infty$（梯度爆炸）</li>
+<li>用途：GLM-5、OPSD 论文</li>
+</ul>
+<p><strong>k2（Chi-squared）</strong>：$D_{k2}(\rho) = \frac{1}{2}(\rho - 1)^2$</p>
+<ul>
+<li>$\chi^2$ 散度估计，对称</li>
+<li>问题：$\rho$ 很大时惩罚 $O(\rho^2)$</li>
+</ul>
+<p><strong>k3（Pinsker 风格，veRL 默认）</strong>：$D_{k3}(\rho) = \rho - 1 - \log \rho$</p>
+<ul>
+<li>永远非负，稳定性最好</li>
+<li>$\rho \to 0$ 时不像 k1 那样爆炸，$\rho \to \infty$ 时线性增长（不像 k2 平方增长）</li>
+<li>来源：DeepSeek-V4 采用</li>
+</ul>
+<p><strong>数值对比</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>$\rho$</th>
+<th>含义</th>
+<th>k1</th>
+<th>k2</th>
+<th>k3</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.01</td>
+<td>Student 极不对</td>
+<td>-4.61</td>
+<td>0.49</td>
+<td><strong>3.62</strong></td>
+</tr>
+<tr>
+<td>0.1</td>
+<td>Student 不太对</td>
+<td>-2.30</td>
+<td>0.41</td>
+<td><strong>1.40</strong></td>
+</tr>
+<tr>
+<td>0.5</td>
+<td>Student 偏弱</td>
+<td>-0.69</td>
+<td>0.13</td>
+<td><strong>0.19</strong></td>
+</tr>
+<tr>
+<td>1.0</td>
+<td>完美一致</td>
+<td>0</td>
+<td>0</td>
+<td><strong>0</strong></td>
+</tr>
+<tr>
+<td>2.0</td>
+<td>Teacher 更强</td>
+<td>0.69</td>
+<td>0.50</td>
+<td><strong>0.31</strong></td>
+</tr>
+<tr>
+<td>10.0</td>
+<td>差异极大</td>
+<td>2.30</td>
+<td>40.50</td>
+<td><strong>6.70</strong></td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>如何选择</strong>：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>推荐</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通用 OPD</td>
+<td><strong>k3</strong></td>
+<td>稳定，DeepSeek-V4 验证</td>
+</tr>
+<tr>
+<td>数学推理（答案确定性高）</td>
+<td>k1 或 k3</td>
+<td>k1 更简单，但需要 clipping</td>
+</tr>
+<tr>
+<td>搜索 Agent（答案开放性高）</td>
+<td><strong>k3</strong></td>
+<td>Teacher/Student 分布可能差异大，k3 更稳定</td>
+</tr>
+<tr>
+<td>需要完整分布信号</td>
+<td><strong>forward_kl_topk</strong></td>
+<td>GKD 模式，精度最高但贵</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h3 id="2-5-Forward-KL-Top-K（GKD-OPD）"><a href="#2-5-Forward-KL-Top-K（GKD-OPD）" class="headerlink" title="2.5 Forward KL Top-K（GKD OPD）"></a>2.5 Forward KL Top-K（GKD OPD）</h3><p>与单样本估计器完全不同——使用 Teacher 的完整 top-k 分布：</p>
+$$
+D_{\text{fkl\_topk}}(s_t) = \sum_{v \in \text{TopK}(\nu(\cdot|s_t))} \nu(v|s_t) \log \frac{\nu(v|s_t)}{\pi_\theta(v|s_t)}$$<ul>
+<li>需要 Teacher 返回 top-k 个 token 的概率（默认 k=32）</li>
+<li>直接对 Student 概率反向传播（不走 policy gradient）</li>
+<li>信号最 dense（每个位置有 k 个 token 的分布信息）</li>
+<li>显存开销大（需要存 k × sequence_length 的 logit tensor）</li>
+</ul>
+<p>OPSD 论文实验表明 Forward KL &gt; Reverse KL（Table 3），但 GLM-5 在生产中选了 PG OPD (k1)，因为长 trajectory 的显存开销不允许 forward KL。</p>
+<h3 id="2-6-Multi-Teacher-OPD-MOPD"><a href="#2-6-Multi-Teacher-OPD-MOPD" class="headerlink" title="2.6 Multi-Teacher OPD (MOPD)"></a>2.6 Multi-Teacher OPD (MOPD)</h3><p>多个领域专家 teacher 同时蒸馏到一个 student。每个训练样本通过 <code>teacher_key</code> 路由到对应的 teacher。</p>
+<p>已在生产中使用：GLM-5、Qwen3、Nemotron-Cascade 2、MiMo-v2-flash、DeepSeek-V4。</p>
+<h3 id="2-7-veRL-的-OPD-实现"><a href="#2-7-veRL-的-OPD-实现" class="headerlink" title="2.7 veRL 的 OPD 实现"></a>2.7 veRL 的 OPD 实现</h3><p>veRL 已有完整的 OPD 实现（<a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">文档</a>），支持：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>参数</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>loss_mode</code></td>
+<td><code>k3</code>（默认）、<code>k1</code>、<code>forward_kl_topk</code> 等</td>
+</tr>
+<tr>
+<td><code>use_task_rewards</code></td>
+<td>是否叠加 RL reward（默认 true）</td>
+</tr>
+<tr>
+<td><code>distillation_loss_coef</code></td>
+<td>蒸馏 loss 权重（默认 1.0）</td>
+</tr>
+<tr>
+<td><code>loss_max_clamp</code></td>
+<td>per-token loss 截断</td>
+</tr>
+<tr>
+<td>多 Teacher</td>
+<td>支持，通过 <code>teacher_models</code> 配置</td>
+</tr>
+</tbody>
+</table>
+</div>
+<h2 id="3-OPSD：On-Policy-Self-Distillation"><a href="#3-OPSD：On-Policy-Self-Distillation" class="headerlink" title="3. OPSD：On-Policy Self-Distillation"></a>3. OPSD：On-Policy Self-Distillation</h2><p><strong>论文</strong>：arXiv:2601.18734 (Siyan Zhao et al., UCLA + Meta, ICML 2026)<br><strong>代码</strong>：<a target="_blank" rel="noopener" href="https://github.com/siyan-zhao/OPSD">https://github.com/siyan-zhao/OPSD</a></p>
+<h3 id="3-1-核心机制"><a href="#3-1-核心机制" class="headerlink" title="3.1 核心机制"></a>3.1 核心机制</h3><p>同一个模型，不同的输入，分别扮演 Student 和 Teacher：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br></pre></td><td class="code"><pre><span class="line">Student: p_S(·|x)         ← 只看问题（模拟推理时）</span><br><span class="line">Teacher: p_T(·|x, y*)     ← 看问题 + 正确答案（特权信息）</span><br><span class="line"></span><br><span class="line">两者共享同一套参数！</span><br><span class="line">Teacher 不生成 token，只做一次 forward pass 算 logprobs。</span><br></pre></td></tr></table></figure>
+<p><strong>直觉</strong>：rationalization（知道答案后理解推理步骤）比 generation（从零推理）容易得多。给模型看正确答案后，它在 student 走过的每个状态上都能提供更好的 token 分布。</p>
+<h3 id="3-2-算法流程"><a href="#3-2-算法流程" class="headerlink" title="3.2 算法流程"></a>3.2 算法流程</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Input: 数据集 S = &#123;(x_i, y_i*)&#125;，模型 p_θ，散度 D</span><br><span class="line">While not converged:</span><br><span class="line">    Sample minibatch B from S</span><br><span class="line">    For each (x, y*) in B:</span><br><span class="line">        1. Student rollout: ŷ ~ p_S(·|x)          [on-policy 采样]</span><br><span class="line">        2. Student forward: p_S(yₙ|x, ŷ&lt;n)        [不知道答案]</span><br><span class="line">        3. Teacher forward: p_T(yₙ|x, y*, ŷ&lt;n)    [知道答案]</span><br><span class="line">        4. Per-token loss: D(p_T || p_S) at each n</span><br><span class="line">    Update θ (梯度只流过 p_S，不流过 p_T)</span><br></pre></td></tr></table></figure>
+<h3 id="3-3-Prompt-构造"><a href="#3-3-Prompt-构造" class="headerlink" title="3.3 Prompt 构造"></a>3.3 Prompt 构造</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;Problem: [问题]\nAnswer:&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;Problem: [问题]\nHere is a reference solution: [y*]\n</span><br><span class="line">   After understanding the reference solution, please try to solve</span><br><span class="line">   this problem using your own approach below:\nAnswer:&quot;</span><br></pre></td></tr></table></figure>
+<p>Teacher 的 prompt 里包含正确答案 y*，但它不生成任何 token——只对 student 的 rollout ŷ 做一次 forward pass，算出每个位置的 logprobs。</p>
+<h3 id="3-4-关键设计决策"><a href="#3-4-关键设计决策" class="headerlink" title="3.4 关键设计决策"></a>3.4 关键设计决策</h3><p><strong>Teacher 固定为初始 checkpoint</strong>：训练过程中不更新 teacher 权重。这样做的好处：</p>
+<ul>
+<li>稳定训练</li>
+<li>隐式正则化：防止 student 偏离初始 policy 太远（类似 GRPO/PPO 中对 reference policy 的 KL penalty）</li>
+</ul>
+<p><strong>Thinking Mode 选择（Qwen3 场景）</strong>：</p>
+<ul>
+<li>最佳组合：Student TM-off + Teacher TM-on</li>
+<li>原因：Teacher 开 thinking 后，在数学相关 token 上的 KL 差异最大 → 监督信号最强</li>
+</ul>
+<p><strong>Per-Token Pointwise KL Clipping</strong>：</p>
+<ul>
+<li>问题：stylistic tokens（”wait”、”however”、”therefore”）的 KL divergence 远高于数学 tokens，会主导训练信号</li>
+<li>解法：per-token pointwise clip，截断每个 token 位置上的最大 KL 贡献：</li>
+</ul>
+$$
+D_{\text{clip}}(p_T \| p_S) = \frac{1}{|\hat{y}|} \sum_n \sum_{v \in \mathcal{V}} \min\!\left(\ell_{n,v},\; \tau\right)$$<ul>
+<li>效果：防止性能崩塌，尤其在 OPSD 快速收敛（~100 steps）时尤为重要</li>
+</ul>
+<p><strong>OPSD Loss（JSD 散度）</strong>：</p>
+$$
+\text{JSD}_\beta(p_T \| p_S) = \beta \cdot \text{KL}(p_T \| m) + (1-\beta) \cdot \text{KL}(p_S \| m)$$<p>其中 $m = \beta \cdot p_T + (1-\beta) \cdot p_S$。实验表明 Forward KL 效果最好（Table 3, Qwen3-1.7B AIME25: Forward KL 43.9 vs Reverse KL 限制增益）。</p>
+<h3 id="3-5-核心实验结果"><a href="#3-5-核心实验结果" class="headerlink" title="3.5 核心实验结果"></a>3.5 核心实验结果</h3><p>在竞赛级数学推理 benchmark 上：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>Token 预算/题</th>
+<th>Rollouts/题</th>
+<th>收敛步数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GRPO</td>
+<td>~128K tokens (8×16K)</td>
+<td>8</td>
+<td>~500</td>
+</tr>
+<tr>
+<td><strong>OPSD</strong></td>
+<td><strong>~1K tokens</strong></td>
+<td><strong>1</strong></td>
+<td><strong>~100</strong></td>
+</tr>
+<tr>
+<td>SFT</td>
+<td>~1K tokens</td>
+<td>-</td>
+<td>~200</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>OPSD 的 token 效率比 GRPO 高 128 倍</strong>，同时效果相当或更好。</p>
+<p>GRPO 的问题：在 100 步内，&gt;50% 的 batch 出现 reward diversity collapse（全对或全错），梯度信号为零。OPSD 的 dense token-level loss 完全不受此影响——答对答错都有学习信号。</p>
+<p>SFT 的问题：在 OpenThoughts 数据集上，SFT 后模型生成长度缩短（学了简洁的参考答案的风格），反而降低了竞赛数学的表现。</p>
+<h3 id="3-6-Policy-Gradient-视角"><a href="#3-6-Policy-Gradient-视角" class="headerlink" title="3.6 Policy Gradient 视角"></a>3.6 Policy Gradient 视角</h3><p>OPSD 可以被看作一个 <strong>dense token-level reward 的 policy gradient</strong>：</p>
+$$
+r_n(x, \hat{y}) = \log p_T(\hat{y}_n | x, y^*, \hat{y}_{<n}) - \log p_S(\hat{y}_n | x, \hat{y}_{<n})$$<p>这个 per-token reward 衡量的是”知道答案的模型在这个 token 上比不知道的模型更倾向于什么”。和 STaR 的对比：</p>
+<ul>
+<li>STaR：sequence-level binary reward（全对才有梯度）</li>
+<li>OPSD：token-level dense reward（每个 token 都有梯度，即使最终答案错误）</li>
+</ul>
+<h2 id="4-GLM-5-的后训练实践"><a href="#4-GLM-5-的后训练实践" class="headerlink" title="4. GLM-5 的后训练实践"></a>4. GLM-5 的后训练实践</h2><p><strong>论文</strong>：arXiv:2602.15763 (Zhipu AI + 清华, 2026.02)<br><strong>模型</strong>：744B 总参数 / 40B 激活参数，256 experts MoE，DSA (Dynamic Sparse Attention)</p>
+<h3 id="4-1-五阶段后训练-Pipeline"><a href="#4-1-五阶段后训练-Pipeline" class="headerlink" title="4.1 五阶段后训练 Pipeline"></a>4.1 五阶段后训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br><span class="line">9</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: Multi-task SFT</span><br><span class="line">    ↓</span><br><span class="line">Stage 2: Reasoning RL（GRPO，数学/代码/科学）</span><br><span class="line">    ↓</span><br><span class="line">Stage 3: Agentic RL（多轮工具调用、搜索 agent）</span><br><span class="line">    ↓</span><br><span class="line">Stage 4: General RL（基础正确性 + 情商 + 任务质量）</span><br><span class="line">    ↓</span><br><span class="line">Stage 5: On-Policy Cross-Stage Distillation ← OPD 的角色</span><br></pre></td></tr></table></figure>
+<h3 id="4-2-Stage-5：跨阶段-OPD"><a href="#4-2-Stage-5：跨阶段-OPD" class="headerlink" title="4.2 Stage 5：跨阶段 OPD"></a>4.2 Stage 5：跨阶段 OPD</h3><p><strong>目的</strong>：恢复前序阶段被后续 RL 退化的能力。</p>
+<p>每个 RL 阶段（Reasoning → Agentic → General）都会优化特定能力，但可能损伤其他能力（catastrophic forgetting）。Stage 5 用 OPD 从<strong>各阶段最佳 checkpoint</strong> 蒸馏回来。</p>
+<p><strong>实现</strong>：PG OPD formulation</p>
+$$
+\hat{A}_{i,t} = \text{sg}\left[\log \pi_{\theta_{\text{teacher}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t}) / \pi_{\theta}^{\text{train}}(y_{i,t}|x, y_{i,<t})\right]$$<ul>
+<li>Teacher = 前序阶段的 final checkpoint</li>
+<li>GRPO group_size = 1（advantage 来自 teacher log-ratio，不需要 group 内对比）</li>
+<li>支持 Multi-Teacher（Reasoning teacher + General teacher 混合路由）</li>
+</ul>
+<h3 id="4-3-异步-RL-基础设施-SLIME"><a href="#4-3-异步-RL-基础设施-SLIME" class="headerlink" title="4.3 异步 RL 基础设施 (SLIME)"></a>4.3 异步 RL 基础设施 (SLIME)</h3><p>GLM-5 的 RL 训练基于 SLIME 框架（<a target="_blank" rel="noopener" href="https://github.com/THUDM/slime），核心优化：">https://github.com/THUDM/slime），核心优化：</a></p>
+<p><strong>异步训练</strong>：generation 和 training 解耦。关键公式：</p>
+$$
+\rho_{i,t} = \frac{\pi_{\theta_{\text{old}}}^{\text{train}}(y_{i,t}|x, y_{i,<t})}{\pi_{\theta_{\text{old}}}^{\text{infer}}(y_{i,t}|x, y_{i,<t})}$$<p>通过 <code>pop(ρ, 1/β, β)</code> 过滤偏离太远的样本（β=2），保证 off-policy 修正的稳定性。</p>
+<p><strong>尾延迟优化</strong>：</p>
+<ul>
+<li>No-queue serving：EP64 + DP64 跨 8 节点，足够 KV-cache 避免排队</li>
+<li>FP8 rollouts + MTP：减少 per-token 延迟</li>
+<li>PD 分离（Prefill-Decode Disaggregation）：prefill 和 decode 分离到不同节点</li>
+</ul>
+<p><strong>Thinking Mode 创新</strong>（三种模式统一）：</p>
+<ol>
+<li>Always-on thinking：标准 CoT 推理</li>
+<li>Always-off thinking：直接回答，低延迟</li>
+<li><strong>Interleaved Thinking</strong>：turn-level 控制——简单请求关闭 thinking，复杂任务开启 thinking，同一个 session 内动态调整</li>
+</ol>
+<h3 id="4-4-Agentic-RL（Stage-3）"><a href="#4-4-Agentic-RL（Stage-3）" class="headerlink" title="4.4 Agentic RL（Stage 3）"></a>4.4 Agentic RL（Stage 3）</h3><p>GLM-5 的 agentic RL 覆盖：前后端编程、工具调用、搜索 agent、通用 agent。</p>
+<p>核心特点：</p>
+<ul>
+<li>异步 GRPO 在完整的多轮 trajectory 上训练</li>
+<li>支持工具调用和环境反馈</li>
+<li>Benchmark：SWE-bench Verified, Terminal-Bench 2.0, BrowseComp, MCP-Atlas, τ²-Bench</li>
+</ul>
+<h2 id="5-对搜索-Agent-的启示"><a href="#5-对搜索-Agent-的启示" class="headerlink" title="5. 对搜索 Agent 的启示"></a>5. 对搜索 Agent 的启示</h2><h3 id="5-1-OPSD-在搜索-Agent-场景的适配"><a href="#5-1-OPSD-在搜索-Agent-场景的适配" class="headerlink" title="5.1 OPSD 在搜索 Agent 场景的适配"></a>5.1 OPSD 在搜索 Agent 场景的适配</h3><p>OPSD 论文在数学推理上验证，搜索 agent 场景有几个关键差异：</p>
+<div class="table-container">
+<table>
+<thead>
+<tr>
+<th>差异点</th>
+<th>数学推理</th>
+<th>搜索 Agent</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>答案确定性</td>
+<td>唯一正确答案</td>
+<td>开放式文本</td>
+</tr>
+<tr>
+<td>Trajectory 长度</td>
+<td>~1K tokens</td>
+<td>5K-10K tokens（含 tool results）</td>
+</tr>
+<tr>
+<td>外部交互</td>
+<td>无</td>
+<td>搜索调用、网页抓取</td>
+</tr>
+<tr>
+<td>GT 来源</td>
+<td>数学验证器</td>
+<td>强模型（如 Claude）产出</td>
+</tr>
+</tbody>
+</table>
+</div>
+<p><strong>适配方案</strong>：</p>
+<figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br><span class="line">5</span><br><span class="line">6</span><br><span class="line">7</span><br><span class="line">8</span><br></pre></td><td class="code"><pre><span class="line">Student prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析&quot;</span><br><span class="line"></span><br><span class="line">Teacher prompt:</span><br><span class="line">  &quot;You are a search agent. Available tools: web_search, fetch_content.</span><br><span class="line">   Query: 黄金价格走势分析</span><br><span class="line">   Reference answer: 截至2026年5月，金价报3218美元/盎司...&quot;</span><br></pre></td></tr></table></figure>
+<p><strong>Loss mask</strong>：只在 assistant 部分（think + tool_call + answer）算 loss，跳过 tool_result（外部返回的搜索结果不是模型生成的）。</p>
+<h3 id="5-2-开放问题"><a href="#5-2-开放问题" class="headerlink" title="5.2 开放问题"></a>5.2 开放问题</h3><ol>
+<li><strong>长 trajectory 的有效性</strong>：论文说早期 token 更重要（关键分支点），search agent 的第一次 search query 选择是否也是关键分支点？</li>
+<li><strong>开放式答案的 rationalization 质量</strong>：数学答案是唯一的，Teacher rationalization 精准。搜索答案是开放的，Teacher 能否有效 rationalize？</li>
+<li><strong>Teacher 过期</strong>：OPSD 固定 teacher 为初始 checkpoint。如果模型快速学会新工具，初始 teacher 可能给出过时指导。何时刷新？</li>
+<li><strong>全词表 vs 采样 token</strong>：论文推荐全词表 logit 蒸馏，但长 trajectory 的显存开销可能不可接受。GLM-5 在生产中选择了 PG OPD（采样 token）正是因为这个 trade-off。</li>
+</ol>
+<h3 id="5-3-推荐的训练-Pipeline"><a href="#5-3-推荐的训练-Pipeline" class="headerlink" title="5.3 推荐的训练 Pipeline"></a>5.3 推荐的训练 Pipeline</h3><figure class="highlight plaintext"><table><tr><td class="gutter"><pre><span class="line">1</span><br><span class="line">2</span><br><span class="line">3</span><br><span class="line">4</span><br></pre></td><td class="code"><pre><span class="line">Stage 1: SFT 冷启动（Claude 轨迹蒸馏，学会工具格式和搜索时机）</span><br><span class="line">Stage 2: OPSD（Claude GT 文本做特权信息，dense token-level 优化）</span><br><span class="line">Stage 3: RL / GRPO（checklist + GT reward，优化搜索策略）</span><br><span class="line">Stage 4: 跨阶段 OPD（参考 GLM-5 Stage 5，恢复退化的能力）</span><br></pre></td></tr></table></figure>
+<h2 id="6-参考文献"><a href="#6-参考文献" class="headerlink" title="6. 参考文献"></a>6. 参考文献</h2><ul>
+<li><strong>OPSD</strong>: Zhao et al., “Self-Distilled Reasoner: On-Policy Self-Distillation for Large Language Models”, ICML 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2601.18734">arXiv:2601.18734</a></li>
+<li><strong>OPD (GKD)</strong>: Agarwal et al., “On-policy distillation of language models: Learning from self-generated mistakes”, ICLR 2024.</li>
+<li><strong>GLM-5</strong>: Zeng et al., “GLM-5: From Vibe Coding to Agentic Engineering”, 2026. <a target="_blank" rel="noopener" href="https://arxiv.org/abs/2602.15763">arXiv:2602.15763</a></li>
+<li><strong>SLIME</strong>: Zhu et al., “slime: An LLM post-training framework for RL Scaling”, 2025. <a target="_blank" rel="noopener" href="https://github.com/THUDM/slime">GitHub</a></li>
+<li><strong>veRL OPD docs</strong>: <a target="_blank" rel="noopener" href="https://verl.readthedocs.io/en/latest/algo/opd.html">verl.readthedocs.io/algo/opd</a></li>
+<li><strong>AwesomeOPD taxonomy</strong>: <a target="_blank" rel="noopener" href="https://github.com/thinkwee/AwesomeOPD">github.com/thinkwee/AwesomeOPD</a></li>
+<li><strong>Qwen3</strong>: Yang et al., “Qwen3 Technical Report”, arXiv:2505.09388, 2025.</li>
+<li><strong>DeepSeek-V4</strong>: DeepSeek-AI, “DeepSeek-V4: Towards Highly Efficient Million-Token Context Intelligence”, 2026.</li>
+</ul>
+
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfi9b1y000wq46r8rjgbnzt" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li></ul>
+
+    </footer>
+  </div>
+  
+    
+<nav id="article-nav">
+  
+    <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/" id="article-nav-newer" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">前一篇</strong>
+      <div class="article-nav-title">
+        
+          MuVERA FDE 多向量检索：从原理到工程落地
+        
+      </div>
+    </a>
+  
+  
+    <a href="/2026/01/19/cacheblend-kvcache-rag-inference/" id="article-nav-older" class="article-nav-link-wrap">
+      <strong class="article-nav-caption">后一篇</strong>
+      <div class="article-nav-title">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</div>
+    </a>
+  
+</nav>
+
+  
+</article>
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%90%9C%E7%B4%A2%E6%8A%80%E6%9C%AF/">搜索技术</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/ColBERT/" rel="tag">ColBERT</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/MuVERA/" rel="tag">MuVERA</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multi-vector/" rel="tag">multi-vector</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/ColBERT/" style="font-size: 10px;">ColBERT</a> <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/MuVERA/" style="font-size: 10px;">MuVERA</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 20px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multi-vector/" style="font-size: 10px;">multi-vector</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 20px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/01/">一月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/21/muvera-fde-multi-vector-retrieval/">MuVERA FDE 多向量检索：从原理到工程落地</a>
+          </li>
         
           <li>
             <a href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
