@@ -53,7 +53,40 @@ MathJax.Hub.Config({
 });
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
-<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"></head>
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0">
+<style>
+#floating-toc {
+  position: fixed;
+  top: 60px;
+  right: 15px;
+  width: 220px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+#floating-toc strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 6px;
+}
+.toc-list { list-style: none; padding: 0; margin: 0; }
+.toc-list li { margin: 3px 0; line-height: 1.5; }
+.toc-list li.toc-h3 { padding-left: 1em; }
+.toc-list a { color: #666; text-decoration: none; transition: color 0.2s; }
+.toc-list a:hover, .toc-list a.active { color: #258fb8; font-weight: 500; }
+#floating-toc::-webkit-scrollbar { width: 3px; }
+#floating-toc::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+@media (max-width: 1300px) { #floating-toc { display: none; } }
+</style></head>
 
 <body>
   <div id="container">
@@ -531,7 +564,7 @@ r_n(x, \hat{y}) = \log p_T(\hat{y}_n | x, y^*, \hat{y}_{<n}) - \log p_S(\hat{y}_
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfit6ve0005e96r3tmz4602" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfk475w0005ir6re5ovf148" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -676,5 +709,25 @@ r_n(x, \hat{y}) = \log p_T(\hat{y}_n | x, y^*, \hat{y}_{<n}) - \log p_S(\hat{y}_
 
 
   </div>
-</body>
+<div id="floating-toc"><strong>目录</strong><ul class="toc-list"><li><a href="#1-蒸馏方法演进路线">1. 蒸馏方法演进路线</a></li><li class="toc-h3"><a href="#1-1-四个阶段">1.1 四个阶段</a></li><li class="toc-h3"><a href="#1-2-核心对比">1.2 核心对比</a></li><li><a href="#2-OPD：On-Policy-Distillation">2. OPD：On-Policy Distillation</a></li><li class="toc-h3"><a href="#2-1-原理">2.1 原理</a></li><li class="toc-h3"><a href="#2-2-两种-Loss-变体">2.2 两种 Loss 变体</a></li><li class="toc-h3"><a href="#2-3-Forward-KL-vs-Reverse-KL">2.3 Forward KL vs Reverse KL</a></li><li class="toc-h3"><a href="#2-4-veRL-的-Reverse-KL-估计器">2.4 veRL 的 Reverse KL 估计器</a></li><li class="toc-h3"><a href="#2-5-Forward-KL-Top-K（GKD-OPD）">2.5 Forward KL Top-K（GKD OPD）</a></li><li class="toc-h3"><a href="#2-6-Multi-Teacher-OPD-MOPD">2.6 Multi-Teacher OPD (MOPD)</a></li><li class="toc-h3"><a href="#2-7-veRL-的-OPD-实现">2.7 veRL 的 OPD 实现</a></li><li><a href="#3-OPSD：On-Policy-Self-Distillation">3. OPSD：On-Policy Self-Distillation</a></li><li class="toc-h3"><a href="#3-1-核心机制">3.1 核心机制</a></li><li class="toc-h3"><a href="#3-2-算法流程">3.2 算法流程</a></li><li class="toc-h3"><a href="#3-3-Prompt-构造">3.3 Prompt 构造</a></li><li class="toc-h3"><a href="#3-4-关键设计决策">3.4 关键设计决策</a></li><li class="toc-h3"><a href="#3-5-核心实验结果">3.5 核心实验结果</a></li><li class="toc-h3"><a href="#3-6-Policy-Gradient-视角">3.6 Policy Gradient 视角</a></li><li><a href="#4-GLM-5-的后训练实践">4. GLM-5 的后训练实践</a></li><li class="toc-h3"><a href="#4-1-五阶段后训练-Pipeline">4.1 五阶段后训练 Pipeline</a></li><li class="toc-h3"><a href="#4-2-Stage-5：跨阶段-OPD">4.2 Stage 5：跨阶段 OPD</a></li><li class="toc-h3"><a href="#4-3-异步-RL-基础设施-SLIME">4.3 异步 RL 基础设施 (SLIME)</a></li><li class="toc-h3"><a href="#4-4-Agentic-RL（Stage-3）">4.4 Agentic RL（Stage 3）</a></li><li><a href="#5-对搜索-Agent-的启示">5. 对搜索 Agent 的启示</a></li><li class="toc-h3"><a href="#5-1-OPSD-在搜索-Agent-场景的适配">5.1 OPSD 在搜索 Agent 场景的适配</a></li><li class="toc-h3"><a href="#5-2-开放问题">5.2 开放问题</a></li><li class="toc-h3"><a href="#5-3-推荐的训练-Pipeline">5.3 推荐的训练 Pipeline</a></li><li><a href="#6-参考文献">6. 参考文献</a></li></ul></div>
+<script>
+(function() {
+  var tocLinks = document.querySelectorAll('.toc-list a');
+  var heads = [];
+  tocLinks.forEach(function(a) {
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) heads.push({ el: el, link: a });
+  });
+  if (!heads.length) return;
+  window.addEventListener('scroll', function() {
+    var st = window.scrollY + 120;
+    var cur = heads[0];
+    for (var i = 0; i < heads.length; i++) {
+      if (heads[i].el.offsetTop <= st) cur = heads[i];
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    cur.link.classList.add('active');
+  });
+})();
+</script></body>
 </html>

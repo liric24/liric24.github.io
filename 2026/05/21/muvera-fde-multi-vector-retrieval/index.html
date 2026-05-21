@@ -52,7 +52,40 @@ MathJax.Hub.Config({
 });
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
-<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"></head>
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0">
+<style>
+#floating-toc {
+  position: fixed;
+  top: 60px;
+  right: 15px;
+  width: 220px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+#floating-toc strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 6px;
+}
+.toc-list { list-style: none; padding: 0; margin: 0; }
+.toc-list li { margin: 3px 0; line-height: 1.5; }
+.toc-list li.toc-h3 { padding-left: 1em; }
+.toc-list a { color: #666; text-decoration: none; transition: color 0.2s; }
+.toc-list a:hover, .toc-list a.active { color: #258fb8; font-weight: 500; }
+#floating-toc::-webkit-scrollbar { width: 3px; }
+#floating-toc::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+@media (max-width: 1300px) { #floating-toc { display: none; } }
+</style></head>
 
 <body>
   <div id="container">
@@ -488,7 +521,7 @@ MathJax.Hub.Config({
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://liric24.github.io/2026/05/21/muvera-fde-multi-vector-retrieval/" data-id="cmpfit6vd0004e96rd4l3eepo" data-title="MuVERA FDE 多向量检索：从原理到工程落地" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="https://liric24.github.io/2026/05/21/muvera-fde-multi-vector-retrieval/" data-id="cmpfk475w0004ir6r98kd7szr" data-title="MuVERA FDE 多向量检索：从原理到工程落地" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -624,5 +657,25 @@ MathJax.Hub.Config({
 
 
   </div>
-</body>
+<div id="floating-toc"><strong>目录</strong><ul class="toc-list"><li><a href="#1-问题：多向量检索的代价">1. 问题：多向量检索的代价</a></li><li><a href="#2-MuVERA-算法原理">2. MuVERA 算法原理</a></li><li class="toc-h3"><a href="#2-1-四步流程">2.1 四步流程</a></li><li class="toc-h3"><a href="#2-2-非对称编码：为什么-Query-用-SUM、Document-用-AVERAGE">2.2 非对称编码：为什么 Query 用 SUM、Document 用 AVERAGE</a></li><li class="toc-h3"><a href="#2-3-natural-dim-与-final-dim-的关系">2.3 natural_dim 与 final_dim 的关系</a></li><li class="toc-h3"><a href="#2-4-空分区回填">2.4 空分区回填</a></li><li><a href="#3-两套参考实现的差异">3. 两套参考实现的差异</a></li><li class="toc-h3"><a href="#3-1-架构流程对比">3.1 架构流程对比</a></li><li class="toc-h3"><a href="#3-2-逐项对比">3.2 逐项对比</a></li><li class="toc-h3"><a href="#3-3-关键设计选择解读">3.3 关键设计选择解读</a></li><li><a href="#4-业界落地进展">4. 业界落地进展</a></li><li class="toc-h3"><a href="#4-1-向量数据库集成">4.1 向量数据库集成</a></li><li class="toc-h3"><a href="#4-2-Qdrant-推荐的两阶段架构">4.2 Qdrant 推荐的两阶段架构</a></li><li class="toc-h3"><a href="#4-3-推荐参数">4.3 推荐参数</a></li><li class="toc-h3"><a href="#4-4-Benchmark">4.4 Benchmark</a></li><li><a href="#5-WARP：原生多向量检索引擎">5. WARP：原生多向量检索引擎</a></li><li class="toc-h3"><a href="#5-1-三大优化">5.1 三大优化</a></li><li class="toc-h3"><a href="#5-2-性能">5.2 性能</a></li><li><a href="#6-LEMUR：学习式压缩">6. LEMUR：学习式压缩</a></li><li><a href="#7-技术路线选型">7. 技术路线选型</a></li><li><a href="#8-实践踩坑：参数选择的影响">8. 实践踩坑：参数选择的影响</a></li></ul></div>
+<script>
+(function() {
+  var tocLinks = document.querySelectorAll('.toc-list a');
+  var heads = [];
+  tocLinks.forEach(function(a) {
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) heads.push({ el: el, link: a });
+  });
+  if (!heads.length) return;
+  window.addEventListener('scroll', function() {
+    var st = window.scrollY + 120;
+    var cur = heads[0];
+    for (var i = 0; i < heads.length; i++) {
+      if (heads[i].el.offsetTop <= st) cur = heads[i];
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    cur.link.classList.add('active');
+  });
+})();
+</script></body>
 </html>

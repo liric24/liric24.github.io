@@ -50,7 +50,40 @@ MathJax.Hub.Config({
 });
 </script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.9/MathJax.js?config=TeX-MML-AM_CHTML" async></script>
-<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0"></head>
+<!-- hexo injector head_end end --><meta name="generator" content="Hexo 7.3.0">
+<style>
+#floating-toc {
+  position: fixed;
+  top: 60px;
+  right: 15px;
+  width: 220px;
+  max-height: calc(100vh - 80px);
+  overflow-y: auto;
+  background: #fff;
+  border: 1px solid #e8e8e8;
+  border-radius: 6px;
+  padding: 14px 16px;
+  font-size: 13px;
+  z-index: 999;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+#floating-toc strong {
+  display: block;
+  margin-bottom: 10px;
+  font-size: 14px;
+  color: #333;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 6px;
+}
+.toc-list { list-style: none; padding: 0; margin: 0; }
+.toc-list li { margin: 3px 0; line-height: 1.5; }
+.toc-list li.toc-h3 { padding-left: 1em; }
+.toc-list a { color: #666; text-decoration: none; transition: color 0.2s; }
+.toc-list a:hover, .toc-list a.active { color: #258fb8; font-weight: 500; }
+#floating-toc::-webkit-scrollbar { width: 3px; }
+#floating-toc::-webkit-scrollbar-thumb { background: #ddd; border-radius: 3px; }
+@media (max-width: 1300px) { #floating-toc { display: none; } }
+</style></head>
 
 <body>
   <div id="container">
@@ -319,7 +352,7 @@ MathJax.Hub.Config({
       
     </div>
     <footer class="article-footer">
-      <a data-url="https://liric24.github.io/2026/01/19/jina-embeddings-v4-paper-reading/" data-id="cmpfit6vc0001e96r77evblac" data-title="Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      <a data-url="https://liric24.github.io/2026/01/19/jina-embeddings-v4-paper-reading/" data-id="cmpfk475v0001ir6r7m066s3y" data-title="Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
       
       
       
@@ -459,5 +492,25 @@ MathJax.Hub.Config({
 
 
   </div>
-</body>
+<div id="floating-toc"><strong>目录</strong><ul class="toc-list"><li><a href="#摘要">摘要</a></li><li><a href="#1-核心贡献">1. 核心贡献</a></li><li><a href="#2-模型架构">2. 模型架构</a></li><li class="toc-h3"><a href="#2-1-真正的多模态处理">2.1 真正的多模态处理</a></li><li class="toc-h3"><a href="#2-2-双模式输出">2.2 双模式输出</a></li><li class="toc-h3"><a href="#2-3-LoRA-适配器">2.3 LoRA 适配器</a></li><li><a href="#3-训练方法">3. 训练方法</a></li><li class="toc-h3"><a href="#3-1-两阶段训练">3.1 两阶段训练</a></li><li class="toc-h3"><a href="#3-2-联合损失函数">3.2 联合损失函数</a></li><li class="toc-h3"><a href="#3-3-训练数据">3.3 训练数据</a></li><li><a href="#4-核心创新：缓解锥形效应">4. 核心创新：缓解锥形效应</a></li><li><a href="#5-性能评测">5. 性能评测</a></li><li class="toc-h3"><a href="#5-1-Jina-VDR-基准（视觉丰富文档）">5.1 Jina-VDR 基准（视觉丰富文档）</a></li><li class="toc-h3"><a href="#5-2-MTEB-性能">5.2 MTEB 性能</a></li><li><a href="#6-总结">6. 总结</a></li><li><a href="#参考资料">参考资料</a></li></ul></div>
+<script>
+(function() {
+  var tocLinks = document.querySelectorAll('.toc-list a');
+  var heads = [];
+  tocLinks.forEach(function(a) {
+    var el = document.getElementById(a.getAttribute('href').slice(1));
+    if (el) heads.push({ el: el, link: a });
+  });
+  if (!heads.length) return;
+  window.addEventListener('scroll', function() {
+    var st = window.scrollY + 120;
+    var cur = heads[0];
+    for (var i = 0; i < heads.length; i++) {
+      if (heads[i].el.offsetTop <= st) cur = heads[i];
+    }
+    tocLinks.forEach(function(a) { a.classList.remove('active'); });
+    cur.link.classList.add('active');
+  });
+})();
+</script></body>
 </html>
