@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  
+  
+  <title>Hua Chen&#39;s Blog</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+  <meta name="description" content="Research notes on embedding, retrieval, and AI systems">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Hua Chen&#39;s Blog">
+<meta property="og:url" content="https://liric24.github.io/index.html">
+<meta property="og:site_name" content="Hua Chen&#39;s Blog">
+<meta property="og:description" content="Research notes on embedding, retrieval, and AI systems">
+<meta property="og:locale" content="zh_CN">
+<meta property="article:author" content="Hua Chen">
+<meta property="article:tag" content="embedding, retrieval, AI search, sparse vector">
+<meta name="twitter:card" content="summary">
+  
+    <link rel="alternate" href="/atom.xml" title="Hua Chen's Blog" type="application/atom+xml">
+  
+  
+    <link rel="shortcut icon" href="/favicon.png">
+  
+  
+  
+<link rel="stylesheet" href="/css/style.css">
+
+  
+    
+<link rel="stylesheet" href="/fancybox/jquery.fancybox.min.css">
+
+  
+  
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/fork-awesome@1.2.0/css/fork-awesome.min.css">
+
+<meta name="generator" content="Hexo 7.3.0"></head>
+
+<body>
+  <div id="container">
+    <div id="wrap">
+      <header id="header">
+  <div id="banner"></div>
+  <div id="header-outer" class="outer">
+    <div id="header-title" class="inner">
+      <h1 id="logo-wrap">
+        <a href="/" id="logo">Hua Chen&#39;s Blog</a>
+      </h1>
+      
+        <h2 id="subtitle-wrap">
+          <a href="/" id="subtitle">Multimodal Representation &amp; AI Search</a>
+        </h2>
+      
+    </div>
+    <div id="header-inner" class="inner">
+      <nav id="main-nav">
+        <a id="main-nav-toggle" class="nav-icon"><span class="fa fa-bars"></span></a>
+        
+          <a class="main-nav-link" href="/">Home</a>
+        
+          <a class="main-nav-link" href="/archives">Archives</a>
+        
+      </nav>
+      <nav id="sub-nav">
+        
+        
+          <a class="nav-icon" href="/atom.xml" title="RSS 订阅"><span class="fa fa-rss"></span></a>
+        
+        <a class="nav-icon nav-search-btn" title="搜索"><span class="fa fa-search"></span></a>
+      </nav>
+      <div id="search-form-wrap">
+        <form action="//google.com/search" method="get" accept-charset="UTF-8" class="search-form"><input type="search" name="q" class="search-form-input" placeholder="搜索"><button type="submit" class="search-form-submit">&#xF002;</button><input type="hidden" name="sitesearch" value="https://liric24.github.io"></form>
+      </div>
+    </div>
+  </div>
+</header>
+
+      <div class="outer">
+        <section id="main">
+  
+    <article id="post-on-policy-distillation-opsd-glm5" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/05/20/on-policy-distillation-opsd-glm5/" class="article-date">
+  <time class="dt-published" datetime="2026-05-19T16:00:00.000Z" itemprop="datePublished">2026-05-20</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>大模型后训练（post-training）正在从”SFT + RLHF”的两阶段范式，演进到以 On-Policy Distillation (OPD) 为核心的新范式。本文梳理蒸馏技术从离线 KD 到 OPSD 的演进脉络，解读 OPSD 论文的核心机制，并结合 GLM-5 技术报告分析 OPD 在大规模生产中的实践。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/05/20/on-policy-distillation-opsd-glm5/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/05/20/on-policy-distillation-opsd-glm5/" data-id="cmpfdvezw000jby6r92h81q5y" data-title="从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-cacheblend-kvcache-rag-inference" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/01/19/cacheblend-kvcache-rag-inference/" class="article-date">
+  <time class="dt-published" datetime="2026-01-18T16:00:00.000Z" itemprop="datePublished">2026-01-19</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/01/19/cacheblend-kvcache-rag-inference/">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <p>CacheBlend 的核心思想是：”积木式”复用 KV Cache。</p>
+<p>在 RAG 场景中，我们将检索到的1个或多个文档拼接成一个长 Prompt 输入给模型。传统的做法是每次都要重新计算整个 Prompt 的 KV Cache，这会导致 TTFT 非常高。CacheBlend 允许我们直接把预先计算好的文档 KV Cache Blend 在一起，通过算法修正位置编码带来的差异，从而跳过繁重的 Prefill 计算阶段。</p>
+<p>以下是详细的技术原理解析：</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/01/19/cacheblend-kvcache-rag-inference/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/01/19/cacheblend-kvcache-rag-inference/" data-id="cmpfdvezq0000by6r6ffs1bom" data-title="CacheBlend：RAG 场景下的 KV Cache 复用技术调研" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+    <article id="post-jina-embeddings-v4-paper-reading" class="h-entry article article-type-post" itemprop="blogPost" itemscope itemtype="https://schema.org/BlogPosting">
+  <div class="article-meta">
+    <a href="/2026/01/19/jina-embeddings-v4-paper-reading/" class="article-date">
+  <time class="dt-published" datetime="2026-01-18T16:00:00.000Z" itemprop="datePublished">2026-01-19</time>
+</a>
+    
+  <div class="article-category">
+    <a class="article-category-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a>
+  </div>
+
+  </div>
+  <div class="article-inner">
+    
+    
+      <header class="article-header">
+        
+  
+    <h1 itemprop="name">
+      <a class="p-name article-title" href="/2026/01/19/jina-embeddings-v4-paper-reading/">Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读</a>
+    </h1>
+  
+
+      </header>
+    
+    <div class="e-content article-entry" itemprop="articleBody">
+      
+        <h2 id="摘要"><a href="#摘要" class="headerlink" title="摘要"></a>摘要</h2><p>jina-embeddings-v4 是一个 <strong>38亿参数</strong>的多模态嵌入模型，通过新颖架构统一了文本和图像表示，支持<strong>单向量和多向量嵌入</strong>（后交互风格）。该模型结合任务特定的 LoRA 适配器，优化了查询-文档检索、语义文本相似性和代码搜索等场景。</p>
+        
+          <p class="article-more-link">
+            <a href="/2026/01/19/jina-embeddings-v4-paper-reading/#more">Read More</a>
+          </p>
+        
+      
+    </div>
+    <footer class="article-footer">
+      <a data-url="https://liric24.github.io/2026/01/19/jina-embeddings-v4-paper-reading/" data-id="cmpfdvezu000bby6rgam45zrk" data-title="Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读" class="article-share-link"><span class="fa fa-share">分享</span></a>
+      
+      
+      
+  <ul class="article-tag-list" itemprop="keywords"><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="article-tag-list-item"><a class="article-tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li></ul>
+
+    </footer>
+  </div>
+  
+</article>
+
+
+
+  
+
+
+</section>
+        
+          <aside id="sidebar">
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">分类</h3>
+    <div class="widget">
+      <ul class="category-list"><li class="category-list-item"><a class="category-list-link" href="/categories/%E6%8A%80%E6%9C%AF%E8%B0%83%E7%A0%94/">技术调研</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签</h3>
+    <div class="widget">
+      <ul class="tag-list" itemprop="keywords"><li class="tag-list-item"><a class="tag-list-link" href="/tags/GLM-5/" rel="tag">GLM-5</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/KV-Cache/" rel="tag">KV Cache</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPD/" rel="tag">OPD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/OPSD/" rel="tag">OPSD</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RAG/" rel="tag">RAG</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/RL/" rel="tag">RL</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/agent/" rel="tag">agent</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/distillation/" rel="tag">distillation</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/embedding/" rel="tag">embedding</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/inference/" rel="tag">inference</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/multimodal/" rel="tag">multimodal</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/retrieval/" rel="tag">retrieval</a></li><li class="tag-list-item"><a class="tag-list-link" href="/tags/vLLM/" rel="tag">vLLM</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">标签云</h3>
+    <div class="widget tagcloud">
+      <a href="/tags/GLM-5/" style="font-size: 10px;">GLM-5</a> <a href="/tags/KV-Cache/" style="font-size: 10px;">KV Cache</a> <a href="/tags/OPD/" style="font-size: 10px;">OPD</a> <a href="/tags/OPSD/" style="font-size: 10px;">OPSD</a> <a href="/tags/RAG/" style="font-size: 10px;">RAG</a> <a href="/tags/RL/" style="font-size: 10px;">RL</a> <a href="/tags/agent/" style="font-size: 10px;">agent</a> <a href="/tags/distillation/" style="font-size: 10px;">distillation</a> <a href="/tags/embedding/" style="font-size: 10px;">embedding</a> <a href="/tags/inference/" style="font-size: 10px;">inference</a> <a href="/tags/multimodal/" style="font-size: 10px;">multimodal</a> <a href="/tags/retrieval/" style="font-size: 10px;">retrieval</a> <a href="/tags/vLLM/" style="font-size: 10px;">vLLM</a>
+    </div>
+  </div>
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">归档</h3>
+    <div class="widget">
+      <ul class="archive-list"><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/05/">五月 2026</a></li><li class="archive-list-item"><a class="archive-list-link" href="/archives/2026/01/">一月 2026</a></li></ul>
+    </div>
+  </div>
+
+
+  
+    
+  <div class="widget-wrap">
+    <h3 class="widget-title">最新文章</h3>
+    <div class="widget">
+      <ul>
+        
+          <li>
+            <a href="/2026/05/20/on-policy-distillation-opsd-glm5/">从 KD 到 OPSD：On-Policy 蒸馏技术演进与 GLM-5 实践解读</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/cacheblend-kvcache-rag-inference/">CacheBlend：RAG 场景下的 KV Cache 复用技术调研</a>
+          </li>
+        
+          <li>
+            <a href="/2026/01/19/jina-embeddings-v4-paper-reading/">Jina-embeddings-v4：多模态多语言检索嵌入模型论文解读</a>
+          </li>
+        
+      </ul>
+    </div>
+  </div>
+
+  
+</aside>
+        
+      </div>
+      <footer id="footer">
+  
+  <div class="outer">
+    <div id="footer-info" class="inner">
+      
+      &copy; 2026 Hua Chen<br>
+      Powered by <a href="https://hexo.io/" target="_blank">Hexo</a>
+    </div>
+  </div>
+</footer>
+
+    </div>
+    <nav id="mobile-nav">
+  
+    <a href="/" class="mobile-nav-link">Home</a>
+  
+    <a href="/archives" class="mobile-nav-link">Archives</a>
+  
+</nav>
+    
+
+
+<script src="/js/jquery-3.6.4.min.js"></script>
+
+
+
+  
+<script src="/fancybox/jquery.fancybox.min.js"></script>
+
+
+
+
+<script src="/js/script.js"></script>
+
+
+
+
+
+  </div>
+</body>
+</html>
